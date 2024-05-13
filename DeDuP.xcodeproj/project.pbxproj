@@ -7,18 +7,23 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D353C5562BF13CDD008B56B2 /* CocoaImageHashing in Frameworks */ = {isa = PBXBuildFile; productRef = D353C5552BF13CDD008B56B2 /* CocoaImageHashing */; };
+		D38477EE2BF734740051C9A9 /* ViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D38477ED2BF734740051C9A9 /* ViewModel.swift */; };
 		D3AB0F372BECCDD30078DBF2 /* DeDuPApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3AB0F362BECCDD30078DBF2 /* DeDuPApp.swift */; };
 		D3AB0F392BECCDD30078DBF2 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3AB0F382BECCDD30078DBF2 /* ContentView.swift */; };
 		D3AB0F3B2BECCDD40078DBF2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D3AB0F3A2BECCDD40078DBF2 /* Assets.xcassets */; };
 		D3AB0F3E2BECCDD40078DBF2 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D3AB0F3D2BECCDD40078DBF2 /* Preview Assets.xcassets */; };
+		D3AB0F4E2BED05360078DBF2 /* PhotosProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3AB0F4D2BED05360078DBF2 /* PhotosProvider.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		D38477ED2BF734740051C9A9 /* ViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewModel.swift; sourceTree = "<group>"; };
 		D3AB0F332BECCDD30078DBF2 /* DeDuP.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DeDuP.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D3AB0F362BECCDD30078DBF2 /* DeDuPApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeDuPApp.swift; sourceTree = "<group>"; };
 		D3AB0F382BECCDD30078DBF2 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		D3AB0F3A2BECCDD40078DBF2 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		D3AB0F3D2BECCDD40078DBF2 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
+		D3AB0F4D2BED05360078DBF2 /* PhotosProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotosProvider.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -26,6 +31,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D353C5562BF13CDD008B56B2 /* CocoaImageHashing in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -53,6 +59,8 @@
 			children = (
 				D3AB0F362BECCDD30078DBF2 /* DeDuPApp.swift */,
 				D3AB0F382BECCDD30078DBF2 /* ContentView.swift */,
+				D38477ED2BF734740051C9A9 /* ViewModel.swift */,
+				D3AB0F4D2BED05360078DBF2 /* PhotosProvider.swift */,
 				D3AB0F3A2BECCDD40078DBF2 /* Assets.xcassets */,
 				D3AB0F3C2BECCDD40078DBF2 /* Preview Content */,
 			);
@@ -83,6 +91,9 @@
 			dependencies = (
 			);
 			name = DeDuP;
+			packageProductDependencies = (
+				D353C5552BF13CDD008B56B2 /* CocoaImageHashing */,
+			);
 			productName = DeDuP;
 			productReference = D3AB0F332BECCDD30078DBF2 /* DeDuP.app */;
 			productType = "com.apple.product-type.application";
@@ -111,6 +122,9 @@
 				Base,
 			);
 			mainGroup = D3AB0F2A2BECCDD30078DBF2;
+			packageReferences = (
+				D353C5542BF13CDD008B56B2 /* XCRemoteSwiftPackageReference "cocoaimagehashing" */,
+			);
 			productRefGroup = D3AB0F342BECCDD30078DBF2 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -137,7 +151,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D3AB0F4E2BED05360078DBF2 /* PhotosProvider.swift in Sources */,
 				D3AB0F392BECCDD30078DBF2 /* ContentView.swift in Sources */,
+				D38477EE2BF734740051C9A9 /* ViewModel.swift in Sources */,
 				D3AB0F372BECCDD30078DBF2 /* DeDuPApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -275,6 +291,7 @@
 				DEVELOPMENT_TEAM = 4QYMTGDJ7R;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Looking for duplicates";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -304,6 +321,7 @@
 				DEVELOPMENT_TEAM = 4QYMTGDJ7R;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Looking for duplicates";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -344,6 +362,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		D353C5542BF13CDD008B56B2 /* XCRemoteSwiftPackageReference "cocoaimagehashing" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ameingast/cocoaimagehashing";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.9.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		D353C5552BF13CDD008B56B2 /* CocoaImageHashing */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D353C5542BF13CDD008B56B2 /* XCRemoteSwiftPackageReference "cocoaimagehashing" */;
+			productName = CocoaImageHashing;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = D3AB0F2B2BECCDD30078DBF2 /* Project object */;
 }
