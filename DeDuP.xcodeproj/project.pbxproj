@@ -7,8 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		D33359282BFBD0160048CE99 /* Meta.swift in Sources */ = {isa = PBXBuildFile; fileRef = D33359272BFBD0160048CE99 /* Meta.swift */; };
+		D33359302BFCE4FC0048CE99 /* DeDuPTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D333592F2BFCE4FC0048CE99 /* DeDuPTests.swift */; };
+		D33359372BFE6BB80048CE99 /* PreviewData.swift in Sources */ = {isa = PBXBuildFile; fileRef = D33359362BFE6BB80048CE99 /* PreviewData.swift */; };
 		D353C5562BF13CDD008B56B2 /* CocoaImageHashing in Frameworks */ = {isa = PBXBuildFile; productRef = D353C5552BF13CDD008B56B2 /* CocoaImageHashing */; };
+		D35561D52C19DE8800F16FC0 /* ModalAnimatin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35561D42C19DE8800F16FC0 /* ModalAnimatin.swift */; };
 		D38477EE2BF734740051C9A9 /* ViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D38477ED2BF734740051C9A9 /* ViewModel.swift */; };
+		D388B8032BFFB1000026FD70 /* Test.swift in Sources */ = {isa = PBXBuildFile; fileRef = D388B8022BFFB1000026FD70 /* Test.swift */; };
 		D3AB0F372BECCDD30078DBF2 /* DeDuPApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3AB0F362BECCDD30078DBF2 /* DeDuPApp.swift */; };
 		D3AB0F392BECCDD30078DBF2 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3AB0F382BECCDD30078DBF2 /* ContentView.swift */; };
 		D3AB0F3B2BECCDD40078DBF2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D3AB0F3A2BECCDD40078DBF2 /* Assets.xcassets */; };
@@ -16,8 +21,24 @@
 		D3AB0F4E2BED05360078DBF2 /* PhotosProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3AB0F4D2BED05360078DBF2 /* PhotosProvider.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		D33359312BFCE4FC0048CE99 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = D3AB0F2B2BECCDD30078DBF2 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D3AB0F322BECCDD30078DBF2;
+			remoteInfo = DeDuP;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		D33359272BFBD0160048CE99 /* Meta.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Meta.swift; sourceTree = "<group>"; };
+		D333592D2BFCE4FC0048CE99 /* DeDuPTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DeDuPTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		D333592F2BFCE4FC0048CE99 /* DeDuPTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeDuPTests.swift; sourceTree = "<group>"; };
+		D33359362BFE6BB80048CE99 /* PreviewData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewData.swift; sourceTree = "<group>"; };
+		D35561D42C19DE8800F16FC0 /* ModalAnimatin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModalAnimatin.swift; sourceTree = "<group>"; };
 		D38477ED2BF734740051C9A9 /* ViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ViewModel.swift; sourceTree = "<group>"; };
+		D388B8022BFFB1000026FD70 /* Test.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Test.swift; sourceTree = "<group>"; };
 		D3AB0F332BECCDD30078DBF2 /* DeDuP.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DeDuP.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		D3AB0F362BECCDD30078DBF2 /* DeDuPApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeDuPApp.swift; sourceTree = "<group>"; };
 		D3AB0F382BECCDD30078DBF2 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -27,6 +48,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		D333592A2BFCE4FC0048CE99 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		D3AB0F302BECCDD30078DBF2 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -38,10 +66,20 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		D333592E2BFCE4FC0048CE99 /* DeDuPTests */ = {
+			isa = PBXGroup;
+			children = (
+				D333592F2BFCE4FC0048CE99 /* DeDuPTests.swift */,
+			);
+			path = DeDuPTests;
+			sourceTree = "<group>";
+		};
 		D3AB0F2A2BECCDD30078DBF2 = {
 			isa = PBXGroup;
 			children = (
+				D33359272BFBD0160048CE99 /* Meta.swift */,
 				D3AB0F352BECCDD30078DBF2 /* DeDuP */,
+				D333592E2BFCE4FC0048CE99 /* DeDuPTests */,
 				D3AB0F342BECCDD30078DBF2 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -50,6 +88,7 @@
 			isa = PBXGroup;
 			children = (
 				D3AB0F332BECCDD30078DBF2 /* DeDuP.app */,
+				D333592D2BFCE4FC0048CE99 /* DeDuPTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -59,6 +98,8 @@
 			children = (
 				D3AB0F362BECCDD30078DBF2 /* DeDuPApp.swift */,
 				D3AB0F382BECCDD30078DBF2 /* ContentView.swift */,
+				D35561D42C19DE8800F16FC0 /* ModalAnimatin.swift */,
+				D388B8022BFFB1000026FD70 /* Test.swift */,
 				D38477ED2BF734740051C9A9 /* ViewModel.swift */,
 				D3AB0F4D2BED05360078DBF2 /* PhotosProvider.swift */,
 				D3AB0F3A2BECCDD40078DBF2 /* Assets.xcassets */,
@@ -71,6 +112,7 @@
 			isa = PBXGroup;
 			children = (
 				D3AB0F3D2BECCDD40078DBF2 /* Preview Assets.xcassets */,
+				D33359362BFE6BB80048CE99 /* PreviewData.swift */,
 			);
 			path = "Preview Content";
 			sourceTree = "<group>";
@@ -78,6 +120,24 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		D333592C2BFCE4FC0048CE99 /* DeDuPTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D33359332BFCE4FC0048CE99 /* Build configuration list for PBXNativeTarget "DeDuPTests" */;
+			buildPhases = (
+				D33359292BFCE4FC0048CE99 /* Sources */,
+				D333592A2BFCE4FC0048CE99 /* Frameworks */,
+				D333592B2BFCE4FC0048CE99 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				D33359322BFCE4FC0048CE99 /* PBXTargetDependency */,
+			);
+			name = DeDuPTests;
+			productName = DeDuPTests;
+			productReference = D333592D2BFCE4FC0048CE99 /* DeDuPTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		D3AB0F322BECCDD30078DBF2 /* DeDuP */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = D3AB0F412BECCDD40078DBF2 /* Build configuration list for PBXNativeTarget "DeDuP" */;
@@ -105,9 +165,13 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1530;
+				LastSwiftUpdateCheck = 1540;
 				LastUpgradeCheck = 1530;
 				TargetAttributes = {
+					D333592C2BFCE4FC0048CE99 = {
+						CreatedOnToolsVersion = 15.4;
+						TestTargetID = D3AB0F322BECCDD30078DBF2;
+					};
 					D3AB0F322BECCDD30078DBF2 = {
 						CreatedOnToolsVersion = 15.3;
 					};
@@ -130,11 +194,19 @@
 			projectRoot = "";
 			targets = (
 				D3AB0F322BECCDD30078DBF2 /* DeDuP */,
+				D333592C2BFCE4FC0048CE99 /* DeDuPTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		D333592B2BFCE4FC0048CE99 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		D3AB0F312BECCDD30078DBF2 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -147,20 +219,78 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		D33359292BFCE4FC0048CE99 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D33359302BFCE4FC0048CE99 /* DeDuPTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		D3AB0F2F2BECCDD30078DBF2 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				D3AB0F4E2BED05360078DBF2 /* PhotosProvider.swift in Sources */,
 				D3AB0F392BECCDD30078DBF2 /* ContentView.swift in Sources */,
+				D33359372BFE6BB80048CE99 /* PreviewData.swift in Sources */,
+				D388B8032BFFB1000026FD70 /* Test.swift in Sources */,
+				D35561D52C19DE8800F16FC0 /* ModalAnimatin.swift in Sources */,
 				D38477EE2BF734740051C9A9 /* ViewModel.swift in Sources */,
+				D33359282BFBD0160048CE99 /* Meta.swift in Sources */,
 				D3AB0F372BECCDD30078DBF2 /* DeDuPApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		D33359322BFCE4FC0048CE99 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = D3AB0F322BECCDD30078DBF2 /* DeDuP */;
+			targetProxy = D33359312BFCE4FC0048CE99 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		D33359342BFCE4FC0048CE99 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4QYMTGDJ7R;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.n7mobile.DeDuPTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DeDuP.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/DeDuP";
+			};
+			name = Debug;
+		};
+		D33359352BFCE4FC0048CE99 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4QYMTGDJ7R;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.4;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.n7mobile.DeDuPTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/DeDuP.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/DeDuP";
+			};
+			name = Release;
+		};
 		D3AB0F3F2BECCDD40078DBF2 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -343,6 +473,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		D33359332BFCE4FC0048CE99 /* Build configuration list for PBXNativeTarget "DeDuPTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D33359342BFCE4FC0048CE99 /* Debug */,
+				D33359352BFCE4FC0048CE99 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		D3AB0F2E2BECCDD30078DBF2 /* Build configuration list for PBXProject "DeDuP" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

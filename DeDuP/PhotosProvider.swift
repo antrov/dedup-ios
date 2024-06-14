@@ -48,8 +48,10 @@ class AssetsGroup: Equatable, Comparable, Identifiable {
         return assets
             .first
             .map { asset in
+//            .compactMap { asset in
                 OSImageHashing.sharedInstance().hashDistance(asset.pHash, to: pHash, with: .pHash)
             }
+//            .max()
     }
     
     static func < (lhs: AssetsGroup, rhs: AssetsGroup) -> Bool {
@@ -59,6 +61,15 @@ class AssetsGroup: Equatable, Comparable, Identifiable {
     
     static func == (lhs: AssetsGroup, rhs: AssetsGroup) -> Bool {
         return lhs.id == rhs.id
+    }
+    
+    func comparedAssets() -> [(Asset, Meta)] {
+        return Array(
+            zip(
+                assets,
+                assets.map(\.meta).compared()
+            )
+        )
     }
 }
 
@@ -83,6 +94,7 @@ struct AssetHashFactory {
         let options = PHImageRequestOptions()
         options.isNetworkAccessAllowed = true
         // Does not work with timeout
+        // But it completes with low quality preview. Has to do something with completion or filtering lowe quality result
 //        options.isSynchronous = true
         return options
     }()
@@ -93,7 +105,7 @@ struct AssetHashFactory {
     
     private static let ph = PHCachingImageManager()
     private static let timeout = DispatchTimeInterval.seconds(5)
-    private static let imageSize = CGSizeMake(20, 20)
+    private static let imageSize = CGSizeMake(50, 50)
     
     func calculateHash(for asset: PHAsset) async throws -> OSHashType {
         return try await withCheckedThrowingContinuation { continuation in
@@ -109,8 +121,10 @@ struct AssetHashFactory {
             
             Self.ph.requestImage(for: asset, targetSize: Self.imageSize, contentMode: .aspectFit, options: Self.requestOptions) { image, info in
                 guard !timeouted else { return }
-                timeoutTask.cancel()
+                guard info?[PHImageResultIsDegradedKey] as? NSNumber != 1 else { return }
                 
+                timeoutTask.cancel()
+        
                 if let error = info?[PHImageErrorKey] as? NSError {
                     print("Failed to obtain asset data: \(error)")
                     continuation.resume(throwing: error)
@@ -126,7 +140,7 @@ struct AssetHashFactory {
     }
 }
 
-struct LibraryAsset: CustomStringConvertible {
+struct LibraryAsset: Hashable, CustomStringConvertible {
     let asset: PHAsset
     let collection: PHAssetCollection?
     let idx: Int
@@ -134,7 +148,16 @@ struct LibraryAsset: CustomStringConvertible {
     var description: String {
         return [asset.creationDate?.formatted(), collection?.localizedTitle].compactMap { $0 }.joined(separator: " - ")
     }
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(asset.localIdentifier)
+    }
+    
+    static func == (lhs: LibraryAsset, rhs: LibraryAsset) -> Bool {
+        return lhs.asset.localIdentifier == rhs.asset.localIdentifier
+    }
 }
+
 
 class Asset: Equatable, ObservableObject, Identifiable {
     
@@ -145,13 +168,13 @@ class Asset: Equatable, ObservableObject, Identifiable {
     var id: String {
         return libraryAsset.asset.localIdentifier
     }
-    let isCloud: Bool = false
     var collectionName: String? {
         return libraryAsset.collection?.localizedTitle
     }
     var creationDate: Date? {
         return libraryAsset.asset.creationDate
     }
+    lazy var meta = Meta.create(from: libraryAsset.asset, collection: libraryAsset.collection)
     
     fileprivate let libraryAsset: LibraryAsset
     
@@ -194,8 +217,29 @@ class PhotosProviderMock: PhotosProvider {
 }
 
 class PhotosProviderImpl: PhotosProvider {
+    
+    enum GroupsSorting {
+        case newestToOldest
+        case oldestToNewest
+        
+        mutating func toggle() {
+            switch self {
+            case .newestToOldest:
+                self = .oldestToNewest
+            case .oldestToNewest:
+                self = .newestToOldest
+            }
+        }
+    }
+    
+    struct AssetsFilter: OptionSet {
+        let rawValue: UInt
+        
+        static let iCloudIncluded = AssetsFilter(rawValue: 1 << 0)
+    }
+    
     @Published var assetsGroups = [AssetsGroup]()
-    @Published var distanceThreshold: Double = 1.0 {
+    @Published var distanceThreshold: Double = 4.0 {
             didSet {
                 Task.detached {
 //                    await self.rebuildGroups()
@@ -203,8 +247,21 @@ class PhotosProviderImpl: PhotosProvider {
             }
         }
     @Published var progress: Double = 0.0
-
+    @Published var sorting = GroupsSorting.oldestToNewest {
+        didSet {
+            self.updateGroupsWothSorting()
+        }
+    }
+    @Published var filters: AssetsFilter = [.iCloudIncluded] {
+        didSet {
+            Task.detached {
+                self.rebuildGroups()
+            }
+        }
+    }
+    
     private var assets = [Asset]()
+    private var groups = [AssetsGroup]()
     private let imageManager = PHCachingImageManager()
     private let thumbnailSize = CGSize(width: 100, height: 100)
 
@@ -214,20 +271,38 @@ class PhotosProviderImpl: PhotosProvider {
         }
     }
     
-    func fetch() async {
-        let libraryAssets = Array(fetchLibraryAssets())
-        assets = await processAssets(libraryAssets)
-        await rebuildGroups()
-        //        }
-//        assetsInfo = fetchLibraryAssets()
-//        await self.processAssets(assetsInfo)
-//        rebuildMap()
+    func requestPhotoLibraryAccess() async -> PHAuthorizationStatus {
+        let currentStatus = PHPhotoLibrary.authorizationStatus()
+
+        switch currentStatus {
+        case .notDetermined:
+            return await withCheckedContinuation { continuation in
+                PHPhotoLibrary.requestAuthorization { newStatus in
+                    continuation.resume(returning: newStatus)
+                }
+            }
+        case .restricted, .denied, .authorized, .limited:
+            return currentStatus
+        @unknown default:
+            return currentStatus
+        }
     }
     
-    func rebuildGroups() async {
-        let groups = await groupAssets(assets, by: OSHashDistanceType(distanceThreshold))
+    func fetch() async {
+        guard await requestPhotoLibraryAccess() == .authorized else { return }
+        let libraryAssets = fetchLibraryAssets()
+        assets = await processAssets(libraryAssets)
+        rebuildGroups()
+    }
+    
+    func rebuildGroups() {
+        groups = groupAssets(assets, by: OSHashDistanceType(distanceThreshold), filters: filters).sorted()
+        updateGroupsWothSorting()
+    }
+    
+    func updateGroupsWothSorting() {
         DispatchQueue.main.async {
-            self.assetsGroups = groups
+            self.assetsGroups = self.sorting == .oldestToNewest ? self.groups : self.groups.reversed()
         }
     }
     
@@ -252,63 +327,69 @@ class PhotosProviderImpl: PhotosProvider {
         assets.removeAll { item in
             item == asset
         }
-        await rebuildGroups()
+        rebuildGroups()
     }
 
-     private func fetchLibraryAssets() -> [LibraryAsset] {
-        var assets = [LibraryAsset]()
+     private func fetchLibraryAssets() -> Set<LibraryAsset> {
+        var assets = Set<LibraryAsset>()
         let fetchOptions = PHFetchOptions()
         fetchOptions.includeAssetSourceTypes = [.typeUserLibrary, .typeiTunesSynced]
          var idx = 0
-        
-        PHAsset.fetchAssets(with: .image, options: fetchOptions).enumerateObjects { asset, _, _ in
-            idx += 1
-            assets.append(LibraryAsset(asset: asset, collection: nil, idx: idx))
-        }
-        
-//        PHAsset.fetchAssets(with: .video, options: fetchOptions).enumerateObjects { asset, _, _ in
-//            assets.append(AssetInfo(asset: asset))
-//        }
-//        
-//        PHAssetCollection
-//            .fetchAssetCollections(with: .album, subtype: .albumRegular, options: nil)
-//            .enumerateObjects { (collection, _, _) in
-//                PHAsset.fetchAssets(in: collection, options: nil).enumerateObjects { asset, _, _ in
-//                    assets.append(AssetInfo(asset: asset, collection: collection))
-//                }
-//            }
+      
+      var collections = [String]()
+
+        PHAssetCollection
+            .fetchAssetCollections(with: .album, subtype: .albumRegular, options: nil)
+            .enumerateObjects { (collection, _, _) in
+                collections.append(collection.localizedTitle ?? "unknown album title")
+                PHAsset.fetchAssets(in: collection, options: nil).enumerateObjects { asset, _, _ in
+                    idx += 1
+                    assets.insert(LibraryAsset(asset: asset, collection: collection, idx: idx))
+                }
+            }
         
         PHAssetCollection
             .fetchAssetCollections(with: .album, subtype: .albumCloudShared, options: nil)
             .enumerateObjects { (collection, _, _) in
 //                guard collection.localizedTitle == "Test" else { return }
-                PHAsset.fetchAssets(in: collection, options: nil).enumerateObjects { asset, _, _ in       
+                collections.append(collection.localizedTitle ?? "unknown album title")
+                PHAsset.fetchAssets(in: collection, options: nil).enumerateObjects { asset, _, _ in
                     guard asset.mediaType == .image else { return }
                     idx += 1
-                    assets.append(LibraryAsset(asset: asset, collection: collection, idx: idx))
+                    assets.insert(LibraryAsset(asset: asset, collection: collection, idx: idx))
                 }
             }
+         
+         
+         PHAsset.fetchAssets(with: .image, options: fetchOptions).enumerateObjects { asset, _, _ in
+             idx += 1
+             assets.insert(LibraryAsset(asset: asset, collection: nil, idx: idx))
+         }
+         
+ //        PHAsset.fetchAssets(with: .video, options: fetchOptions).enumerateObjects { asset, _, _ in
+ //            assets.insert(AssetInfo(asset: asset))
+ //        }
+ //
+         print("------")
+        print(collections)
+         print("------")
          
          return assets
     }
     
-    private func processAssets(_ libraryAssets: [LibraryAsset]) async -> [Asset] {
+    private func processAssets(_ libraryAssets: Set<LibraryAsset>) async -> [Asset] {
         let hashFactory = AssetHashFactory()
         
         return await withTaskGroup(of: (libraryAsset: LibraryAsset, pHash: OSHashType?).self) { group in
             for libraryAsset in libraryAssets {
-//                print("Fetching hash for \(libraryAsset.idx) of \(libraryAssets.count)")
                 group.addTask {
                     (libraryAsset, try? await hashFactory.calculateHash(for: libraryAsset.asset))
                 }
-//                print("Added task, group is \(group.isCancelled)")
             }
-            print("Creating assets")
 
             var assets: [Asset] = []
             
             for await task in group {
-//                print("Got task for \(task.libraryAsset.idx)")
                 guard let pHash = task.pHash else { print("Hash is empty for asset \(task.libraryAsset)"); continue }
                 assets.append(Asset(asset: task.libraryAsset, pHash: pHash))
             }
@@ -319,27 +400,31 @@ class PhotosProviderImpl: PhotosProvider {
         }
     }
     
-    private func groupAssets(_ assets: [Asset], by maxDistance: OSHashDistanceType) async -> [AssetsGroup] {
+    private func groupAssets(_ assets: [Asset], by maxDistance: OSHashDistanceType, filters: AssetsFilter) -> [AssetsGroup] {
         return assets
             .enumerated()
             .reduce([AssetsGroup]()) { groups, element in
                 let asset = element.element
                 let index = element.offset
+                DispatchQueue.main.async {
+                    self.progress = Double(index) / Double(assets.count)
+                }
+                
+                guard Self.isIncluded(asset: asset.libraryAsset, filters: filters) else { return groups }
                 var groups = groups
                 if let nearest = groups.nearestGroup(to: asset.pHash), nearest.distance < maxDistance {
                     nearest.group.assets.append(asset)
                 } else {
                     groups.append(AssetsGroup(asset: asset))
                 }
-                DispatchQueue.main.async {
-                    self.progress = Double(index) / Double(assets.count)
-                }
                 return groups
             }
             .filter { group in
                 group.assets.count > 1
             }
-            .sorted()
     }
     
+    private static func isIncluded(asset: LibraryAsset, filters: AssetsFilter) -> Bool {
+        return filters.contains(.iCloudIncluded) || asset.asset.sourceType != .typeCloudShared
+    }
 }
