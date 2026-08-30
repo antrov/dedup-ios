@@ -42,8 +42,9 @@ class AssetMock: Asset {
     }
     
     init() {
-        super.init(asset: LibraryAsset(asset: PHAsset(), collection: nil, idx: 0),
-                   pHash: 0)
+        super.init(libraryAsset: LibraryAsset(asset: PHAsset(), collection: nil, idx: 0),
+                   pHash: 0,
+                   photoLibrary: PhotoLibraryServiceMock())
         self.thumbnail = UIImage(named: "StockPhoto\(Int.random(in: 1...5))")
     }
 }
