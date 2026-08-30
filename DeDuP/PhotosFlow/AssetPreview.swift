@@ -11,7 +11,7 @@ import SwiftUI
 /// injected `PhotoLibraryServiceProtocol`), so it only needs a delete callback from its parent.
 struct AssetPreview: View {
     @StateObject var assetInfo: Asset
-    var onAssetDelete: (() -> ())
+    var onAssetDelete: () -> Void
 
     private static let previewDimension = 100.0
 
@@ -20,14 +20,14 @@ struct AssetPreview: View {
             ZStack(alignment: .topTrailing) {
                 AsyncThumbnail(thumbnail: assetInfo.thumbnail)
                 Button(action: onAssetDelete) {
-                    Image(systemName: "trash")  // Using SF Symbols for the trash icon
+                    Image(systemName: "trash") // Using SF Symbols for the trash icon
                         .resizable()
                         .scaledToFit()
-                        .frame(width: 12, height: 12)  // Set the icon size smaller
-                        .foregroundColor(.black)  // Set the icon color to black
-                        .padding(6)  // Padding around the icon to increase the button's touch area
-                        .background(Color.white)  // Set the background color of the button to white
-                        .clipShape(RoundedRectangle(cornerRadius: 3))  // Make the background rounded
+                        .frame(width: 12, height: 12) // Set the icon size smaller
+                        .foregroundColor(.black) // Set the icon color to black
+                        .padding(6) // Padding around the icon to increase the button's touch area
+                        .background(Color.white) // Set the background color of the button to white
+                        .clipShape(RoundedRectangle(cornerRadius: 3)) // Make the background rounded
                         .shadow(radius: 1)
                 }
                 .padding(3)

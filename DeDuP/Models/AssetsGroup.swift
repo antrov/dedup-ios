@@ -10,21 +10,20 @@ import Foundation
 /// A cluster of visually similar assets. Pure container - grouping/matching logic lives in
 /// PhotosViewModel, which is the only layer that knows about the hashing service.
 class AssetsGroup: Equatable, Comparable, Identifiable {
-
     let id: UUID
     var assets: [Asset]
     var creationDate: ClosedRange<Date>?
 
     init(asset: Asset) {
-        self.assets = [asset]
-        self.id = UUID()
-        self.creationDate = Self.creationDateOfAssets([asset])
+        assets = [asset]
+        id = UUID()
+        creationDate = Self.creationDateOfAssets([asset])
     }
 
     init(assets: [Asset]) {
         self.assets = assets
-        self.id = UUID()
-        self.creationDate = Self.creationDateOfAssets(assets)
+        id = UUID()
+        creationDate = Self.creationDateOfAssets(assets)
     }
 
     func addAsset(_ asset: Asset) {
@@ -35,7 +34,7 @@ class AssetsGroup: Equatable, Comparable, Identifiable {
     private static func creationDateOfAssets(_ assets: [Asset]) -> ClosedRange<Date>? {
         let dates = assets.compactMap(\.creationDate)
         guard let minDate = dates.min(), let maxDate = dates.max() else { return nil }
-        return minDate...maxDate
+        return minDate ... maxDate
     }
 
     static func < (lhs: AssetsGroup, rhs: AssetsGroup) -> Bool {
@@ -58,11 +57,9 @@ class AssetsGroup: Equatable, Comparable, Identifiable {
 }
 
 extension ClosedRange<Date> {
-
     var formatted: String {
         let lowerFormatted = lowerBound.formatted(.iso8601)
         guard lowerBound != upperBound else { return lowerFormatted }
         return "\(lowerFormatted) - \(upperBound.formatted(.iso8601))"
     }
-
 }

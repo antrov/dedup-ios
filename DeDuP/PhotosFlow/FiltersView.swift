@@ -18,7 +18,7 @@ struct FiltersView: View {
     var body: some View {
         VStack {
             ProgressView("Progress", value: progress)
-            Slider(value: $distanceThreshold, in: 0...30, step: 1) { editing in
+            Slider(value: $distanceThreshold, in: 0 ... 30, step: 1) { editing in
                 guard !editing else { return }
                 onThresholdCommitted()
             }

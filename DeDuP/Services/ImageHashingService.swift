@@ -5,9 +5,9 @@
 //  Created by Hubert Andrzejewski on 09/05/2024.
 //
 
+import CocoaImageHashing
 import Foundation
 import Photos
-import CocoaImageHashing
 
 /// Perceptual-hash computation and comparison, behind a protocol so the (slow, PhotoKit-backed)
 /// real implementation can be swapped for a fake in previews and tests.
@@ -17,7 +17,6 @@ protocol ImageHashingServiceProtocol {
 }
 
 final class ImageHashingService: ImageHashingServiceProtocol {
-
     private struct HashingError: Error {
         let reason: String
     }
@@ -44,19 +43,25 @@ final class ImageHashingService: ImageHashingServiceProtocol {
             }
             DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: timeoutTask)
 
-            imageManager.requestImage(for: asset, targetSize: imageSize, contentMode: .aspectFit, options: Self.requestOptions) { image, info in
-                guard !timedOut else { return }
-                guard info?[PHImageResultIsDegradedKey] as? NSNumber != 1 else { return }
-                timeoutTask.cancel()
+            imageManager
+                .requestImage(
+                    for: asset,
+                    targetSize: imageSize,
+                    contentMode: .aspectFit,
+                    options: Self.requestOptions
+                ) { image, info in
+                    guard !timedOut else { return }
+                    guard info?[PHImageResultIsDegradedKey] as? NSNumber != 1 else { return }
+                    timeoutTask.cancel()
 
-                if let error = info?[PHImageErrorKey] as? NSError {
-                    continuation.resume(throwing: error)
-                } else if let image, let data = image.pngData() {
-                    continuation.resume(returning: OSImageHashing.sharedInstance().hashImageData(data, with: .pHash))
-                } else {
-                    continuation.resume(throwing: HashingError(reason: "empty image data"))
+                    if let error = info?[PHImageErrorKey] as? NSError {
+                        continuation.resume(throwing: error)
+                    } else if let image, let data = image.pngData() {
+                        continuation.resume(returning: OSImageHashing.sharedInstance().hashImageData(data, with: .pHash))
+                    } else {
+                        continuation.resume(throwing: HashingError(reason: "empty image data"))
+                    }
                 }
-            }
         }
     }
 

@@ -8,49 +8,53 @@
 import Photos
 import UIKit
 
-fileprivate extension Field {
-    
+private extension Field {
     static func mock(of values: [T]) -> Field<T> {
-        return Field(value: values.randomElement()!, difference: .allCases.randomElement()!)
+        return Field(
+            value: values.randomElement() ?? values[0],
+            difference: DifferenceResult.allCases.randomElement() ?? .notCompared
+        )
     }
-    
 }
 
 class AssetMock: Asset {
-    
     override var id: String {
         return UUID().uuidString
     }
-    
+
     override var collectionName: String? {
         return ["Family Photos", "Dog", "Vacations", "Undercover"].randomElement()
     }
+
     override var creationDate: Date? {
-        return Date(timeIntervalSinceReferenceDate: TimeInterval.random(in: 0...Date.timeIntervalSinceReferenceDate))
+        return Date(timeIntervalSinceReferenceDate: TimeInterval.random(in: 0 ... Date.timeIntervalSinceReferenceDate))
     }
+
     override var meta: Meta {
-        set { /* nop */ }
-        get { Meta(identifier: UUID().uuidString,
-                   dimensions: .mock(of: ["1024 x 768", "1920 x 1080"]),
-                   creationDate: .mock(of: [.distantFuture, .distantPast]),
-                   modificationDate: .mock(of: [.distantFuture, .distantPast]),
-                   typeName: .mock(of: ["image", "video"]),
-                   subtypesName: .mock(of: ["panorama", "photo depth"]),
-                   album: .mock(of: [.cloudShared("Shared"), .userLibrary("Local")]),
-                   hasAdjustments: .mock(of: [true, false]))
+        get { Meta(
+            identifier: UUID().uuidString,
+            dimensions: .mock(of: ["1024 x 768", "1920 x 1080"]),
+            creationDate: .mock(of: [.distantFuture, .distantPast]),
+            modificationDate: .mock(of: [.distantFuture, .distantPast]),
+            typeName: .mock(of: ["image", "video"]),
+            subtypesName: .mock(of: ["panorama", "photo depth"]),
+            album: .mock(of: [.cloudShared("Shared"), .userLibrary("Local")]),
+            hasAdjustments: .mock(of: [true, false])
+        )
         }
+        set { /* nop */ }
     }
-    
+
     init() {
-        super.init(libraryAsset: LibraryAsset(asset: PHAsset(), collection: nil, idx: 0),
-                   pHash: 0,
-                   photoLibrary: PhotoLibraryServiceMock())
-        self.thumbnail = UIImage(named: "StockPhoto\(Int.random(in: 1...5))")
+        super.init(
+            libraryAsset: LibraryAsset(asset: PHAsset(), collection: nil, idx: 0),
+            pHash: 0,
+            photoLibrary: PhotoLibraryServiceMock()
+        )
+        thumbnail = UIImage(named: "StockPhoto\(Int.random(in: 1 ... 5))")
     }
 }
 
 extension AssetsGroup {
-    
-    static let mock: AssetsGroup = AssetsGroup(assets: (0...Int.random(in: 2...5)).map { _ in AssetMock() })
-    
+    static let mock: AssetsGroup = .init(assets: (0 ... Int.random(in: 2 ... 5)).map { _ in AssetMock() })
 }

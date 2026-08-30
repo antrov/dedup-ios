@@ -7,21 +7,20 @@
 
 #if DEBUG
 
-import Foundation
-import CocoaImageHashing
+    import CocoaImageHashing
+    import Foundation
 
-final class ImageHashingServiceMock: ImageHashingServiceProtocol {
+    final class ImageHashingServiceMock: ImageHashingServiceProtocol {
+        var hashToReturn: OSHashType = 0
+        var distanceToReturn: OSHashDistanceType = 0
 
-    var hashToReturn: OSHashType = 0
-    var distanceToReturn: OSHashDistanceType = 0
+        func hash(for _: LibraryAsset) async throws -> OSHashType {
+            hashToReturn
+        }
 
-    func hash(for asset: LibraryAsset) async throws -> OSHashType {
-        hashToReturn
+        func distance(_: OSHashType, _: OSHashType) -> OSHashDistanceType {
+            distanceToReturn
+        }
     }
-
-    func distance(_ lhs: OSHashType, _ rhs: OSHashType) -> OSHashDistanceType {
-        distanceToReturn
-    }
-}
 
 #endif

@@ -1,0 +1,13 @@
+--swiftversion 5.0
+--indent 4
+--indentcase false
+--trimwhitespace always
+--maxwidth 130
+--wraparguments before-first
+--wrapparameters before-first
+--wrapcollections before-first
+--closingparen balanced
+--self remove
+--disable trailingCommas
+--importgrouping alphabetized
+--exclude dedup_grid,.build

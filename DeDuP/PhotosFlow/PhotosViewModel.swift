@@ -5,12 +5,11 @@
 //  Created by Hubert Andrzejewski on 09/05/2024.
 //
 
+import CocoaImageHashing
 import Foundation
 import Photos
-import CocoaImageHashing
 
 final class PhotosViewModel: ObservableObject {
-
     enum GroupsSorting {
         case newestToOldest
         case oldestToNewest
@@ -32,6 +31,7 @@ final class PhotosViewModel: ObservableObject {
     @Published var sorting = GroupsSorting.oldestToNewest {
         didSet { applySorting() }
     }
+
     @Published var filters: AssetsFilter = [.iCloudIncluded] {
         didSet { Task.detached { self.rebuildGroups() } }
     }
@@ -43,8 +43,10 @@ final class PhotosViewModel: ObservableObject {
     private var groups = [AssetsGroup]()
 
     /// Real services by default; pass fakes conforming to the same protocols for previews/tests.
-    init(photoLibrary: PhotoLibraryServiceProtocol = PhotoLibraryService(),
-         hashing: ImageHashingServiceProtocol = ImageHashingService()) {
+    init(
+        photoLibrary: PhotoLibraryServiceProtocol = PhotoLibraryService(),
+        hashing: ImageHashingServiceProtocol = ImageHashingService()
+    ) {
         self.photoLibrary = photoLibrary
         self.hashing = hashing
         Task.detached {
@@ -127,14 +129,14 @@ final class PhotosViewModel: ObservableObject {
 }
 
 private extension Array where Element == AssetsGroup {
-
-    func nearestGroup(to pHash: OSHashType, using hashing: ImageHashingServiceProtocol) -> (group: AssetsGroup, distance: OSHashDistanceType)? {
-        let nearestElement = map { group in
+    func nearestGroup(
+        to pHash: OSHashType,
+        using hashing: ImageHashingServiceProtocol
+    ) -> (group: AssetsGroup, distance: OSHashDistanceType)? {
+        let distances = map { group in
             group.assets.first.map { hashing.distance($0.pHash, pHash) } ?? OSHashDistanceType.max
         }
-        .enumerated()
-        .min { $0.element < $1.element }
-        guard let element = nearestElement else { return nil }
-        return (self[element.offset], element.element)
+        guard let offset = distances.indices.min(by: { distances[$0] < distances[$1] }) else { return nil }
+        return (self[offset], distances[offset])
     }
 }

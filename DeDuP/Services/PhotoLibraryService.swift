@@ -19,7 +19,6 @@ protocol PhotoLibraryServiceProtocol {
 }
 
 final class PhotoLibraryService: PhotoLibraryServiceProtocol {
-
     private let imageManager = PHCachingImageManager()
 
     func requestAuthorization() async -> PHAuthorizationStatus {
@@ -78,9 +77,10 @@ final class PhotoLibraryService: PhotoLibraryServiceProtocol {
         options.isSynchronous = false
 
         return await withCheckedContinuation { continuation in
-            imageManager.requestImage(for: asset.asset, targetSize: size, contentMode: .aspectFill, options: options) { image, _ in
-                continuation.resume(returning: image)
-            }
+            imageManager
+                .requestImage(for: asset.asset, targetSize: size, contentMode: .aspectFill, options: options) { image, _ in
+                    continuation.resume(returning: image)
+                }
         }
     }
 

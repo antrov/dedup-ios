@@ -1,0 +1,31 @@
+#!/bin/sh
+# Formats and lints staged Swift files before allowing a commit.
+# Installed via scripts/setup-hooks.sh — see README.md for details.
+
+export PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
+
+STAGED_SWIFT_FILES=$(git diff --cached --name-only --diff-filter=d -- '*.swift')
+
+if [ -z "$STAGED_SWIFT_FILES" ]; then
+    exit 0
+fi
+
+if ! command -v swiftformat >/dev/null 2>&1 || ! command -v swiftlint >/dev/null 2>&1; then
+    echo "warning: swiftformat/swiftlint not installed, skipping pre-commit checks (brew install swiftformat swiftlint)"
+    exit 0
+fi
+
+echo "Running SwiftFormat on staged files..."
+echo "$STAGED_SWIFT_FILES" | xargs swiftformat --quiet
+echo "$STAGED_SWIFT_FILES" | xargs git add
+
+echo "Running SwiftLint on staged files..."
+echo "$STAGED_SWIFT_FILES" | xargs swiftlint lint --quiet
+LINT_STATUS=$?
+
+if [ "$LINT_STATUS" -ne 0 ]; then
+    echo "error: SwiftLint found violations. Fix them before committing (or run 'swiftlint lint --fix')."
+    exit 1
+fi
+
+exit 0

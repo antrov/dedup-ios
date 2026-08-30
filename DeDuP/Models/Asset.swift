@@ -5,14 +5,13 @@
 //  Created by Hubert Andrzejewski on 09/05/2024.
 //
 
+import CocoaImageHashing
 import Foundation
 import UIKit
-import CocoaImageHashing
 
 /// A single library asset plus its perceptual hash. Loads its own thumbnail lazily through
 /// an injected `PhotoLibraryServiceProtocol`, so it stays testable/previewable without PhotoKit.
 class Asset: Equatable, ObservableObject, Identifiable {
-
     @Published var thumbnail: UIImage?
 
     let pHash: OSHashType
@@ -20,9 +19,18 @@ class Asset: Equatable, ObservableObject, Identifiable {
 
     private let photoLibrary: PhotoLibraryServiceProtocol
 
-    var id: String { libraryAsset.asset.localIdentifier }
-    var collectionName: String? { libraryAsset.collection?.localizedTitle }
-    var creationDate: Date? { libraryAsset.asset.creationDate }
+    var id: String {
+        libraryAsset.asset.localIdentifier
+    }
+
+    var collectionName: String? {
+        libraryAsset.collection?.localizedTitle
+    }
+
+    var creationDate: Date? {
+        libraryAsset.asset.creationDate
+    }
+
     lazy var meta = Meta.create(from: libraryAsset.asset, collection: libraryAsset.collection)
 
     init(libraryAsset: LibraryAsset, pHash: OSHashType, photoLibrary: PhotoLibraryServiceProtocol) {

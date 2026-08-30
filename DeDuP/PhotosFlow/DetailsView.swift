@@ -16,26 +16,32 @@ struct DetailsView: View {
             GeometryReader { geo in
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack {
-                        ForEach(assetsGroup.comparedAssets(), id: \.0.id) { (asset, meta) in
+                        ForEach(assetsGroup.comparedAssets(), id: \.0.id) { asset, meta in
                             VStack {
-                                //                            AsyncThumbnail(thumbnail: asset.thumbnail)
-                                Image(uiImage: asset.thumbnail!)
-                                    .resizable()
-                                    .scaledToFill()
-                                    .frame(width: geo.size.width - Self.itemsSpacing * 2, height: geo.size.height / 2.0)
-                                    .clipped()
-                                    .cornerRadius(5)
+                                Group {
+                                    if let thumbnail = asset.thumbnail {
+                                        Image(uiImage: thumbnail)
+                                            .resizable()
+                                            .scaledToFill()
+                                    } else {
+                                        Rectangle()
+                                            .fill(Color.gray)
+                                    }
+                                }
+                                .frame(width: geo.size.width - Self.itemsSpacing * 2, height: geo.size.height / 2.0)
+                                .clipped()
+                                .cornerRadius(5)
                                 //                    MetaField(meta.identifier)
 
 //                                List {
 //                                    Section {
-                                        MetaField(field: meta.creationDate)
-                                        MetaField(field: meta.modificationDate)
-                                        MetaField(field: meta.typeName)
-                                        MetaField(field: meta.subtypesName)
-                                        MetaField(field: meta.dimensions)
-                                        MetaField(field: meta.album)
-                                        MetaField(field: meta.hasAdjustments)
+                                MetaField(field: meta.creationDate)
+                                MetaField(field: meta.modificationDate)
+                                MetaField(field: meta.typeName)
+                                MetaField(field: meta.subtypesName)
+                                MetaField(field: meta.dimensions)
+                                MetaField(field: meta.album)
+                                MetaField(field: meta.hasAdjustments)
 //                                    }
 //                                }
                                 Spacer()
@@ -49,7 +55,6 @@ struct DetailsView: View {
                         }
                     }
                     .scrollTargetLayout()
-
                 }
                 .frame(maxHeight: .infinity)
                 .scrollTargetBehavior(.viewAligned)
@@ -57,13 +62,11 @@ struct DetailsView: View {
             }
             .toolbar {
                 ToolbarItemGroup(placement: .bottomBar) {
-                    Button {
-                    } label: {
+                    Button {} label: {
                         Image(systemName: "square.and.arrow.up")
                     }
 
-                    Button(action: {
-                    }) {
+                    Button {} label: {
                         Image(systemName: "trash")
                     }
                 }

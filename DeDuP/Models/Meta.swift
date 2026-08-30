@@ -22,21 +22,20 @@ struct Field<T: Equatable>: Equatable, CustomStringConvertible {
         guard let ld = lhs.value as? Date, let rd = rhs.value as? Date else { return lhs.value == rhs.value }
         return abs(ld.timeIntervalSince(rd)) < 1.0
     }
-    
+
     var description: String {
         return "\(value) \(difference == .different ? " !" : "")"
     }
 }
 
-fileprivate extension Array {
-    
+private extension Array {
     func areEqual<T>() -> Bool where Element == Field<T> {
         guard let lhs = first else { return false }
         return reduce(true) { partialResult, rhs in
             partialResult && lhs == rhs
         }
     }
-    
+
     func compared<T>() -> [Element] where Element == Field<T> {
         let difference: DifferenceResult = areEqual() ? .equal : .different
         return map { field in
@@ -54,25 +53,24 @@ struct Meta {
     let subtypesName: Field<String>
     let album: Field<AlbumType>
     let hasAdjustments: Field<Bool>
-    
+
     static func create(from asset: PHAsset, collection: PHAssetCollection?) -> Meta {
         let collectionName = collection?.localizedTitle ?? "Unknown"
-        let albumType = AlbumType.create(sourceType: asset.sourceType, name: collectionName)!
-        let meta = Meta(identifier: asset.localIdentifier,
-                        dimensions: Field(value: "\(asset.pixelWidth) x \(asset.pixelHeight)", difference: .notCompared),
-                        creationDate: Field(value: asset.creationDate, difference: .notCompared),
-                        modificationDate: Field(value: asset.modificationDate, difference: .notCompared),
-                        typeName: Field(value: asset.mediaType.name, difference: .notCompared),
-                        subtypesName: Field(value: asset.mediaSubtypes.names.joined(separator: ", "), difference: .notCompared),
-                        album: Field(value: albumType, difference: .notCompared),
-                        hasAdjustments: Field(value: asset.hasAdjustments, difference: .notCompared)
+        let albumType = AlbumType.create(sourceType: asset.sourceType, name: collectionName) ?? .userLibrary(collectionName)
+        return Meta(
+            identifier: asset.localIdentifier,
+            dimensions: Field(value: "\(asset.pixelWidth) x \(asset.pixelHeight)", difference: .notCompared),
+            creationDate: Field(value: asset.creationDate, difference: .notCompared),
+            modificationDate: Field(value: asset.modificationDate, difference: .notCompared),
+            typeName: Field(value: asset.mediaType.name, difference: .notCompared),
+            subtypesName: Field(value: asset.mediaSubtypes.names.joined(separator: ", "), difference: .notCompared),
+            album: Field(value: albumType, difference: .notCompared),
+            hasAdjustments: Field(value: asset.hasAdjustments, difference: .notCompared)
         )
-        return meta
     }
 }
 
 extension Array where Element == Meta {
-    
     func compared() -> [Meta] {
         let dimensions = map(\.dimensions).compared()
         let creationDates = map(\.creationDate).compared()
@@ -81,65 +79,63 @@ extension Array where Element == Meta {
         let subtypesNames = map(\.subtypesName).compared()
         let albums = map(\.album).compared()
         let hasAdjustments = map(\.hasAdjustments).compared()
-        
-        return enumerated().map { (index, meta) in
-            return Meta(identifier: meta.identifier,
-                        dimensions: dimensions[index],
-                        creationDate: creationDates[index],
-                        modificationDate: modificationDates[index],
-                        typeName: typeNames[index],
-                        subtypesName: subtypesNames[index],
-                        album: albums[index],
-                        hasAdjustments: hasAdjustments[index]
+
+        return enumerated().map { index, meta in
+            Meta(
+                identifier: meta.identifier,
+                dimensions: dimensions[index],
+                creationDate: creationDates[index],
+                modificationDate: modificationDates[index],
+                typeName: typeNames[index],
+                subtypesName: subtypesNames[index],
+                album: albums[index],
+                hasAdjustments: hasAdjustments[index]
             )
         }
     }
-    
 }
 
 enum AlbumType: Equatable, CustomStringConvertible {
     case cloudShared(String)
     case userLibrary(String?)
     case iTunesSynced(String)
-    
+
     var albumName: String? {
         switch self {
-        case .cloudShared(let name): return name
-        case .userLibrary(let name): return name
-        case .iTunesSynced(let name): return name
+        case let .cloudShared(name): return name
+        case let .userLibrary(name): return name
+        case let .iTunesSynced(name): return name
         }
     }
-    
+
     fileprivate static func create(sourceType: PHAssetSourceType, name: String?) -> AlbumType? {
         switch sourceType {
         case .typeCloudShared:
             guard let name = name else { fallthrough }
             return .cloudShared(name)
-            
+
         case .typeUserLibrary:
             return .userLibrary(name)
-            
+
         case .typeiTunesSynced:
             guard let name = name else { fallthrough }
             return .iTunesSynced(name)
-            
-        default: 
+
+        default:
             return nil
         }
     }
-    
+
     var description: String {
         switch self {
-        case .cloudShared(let name): return "cloudShared \(name)"
-        case .userLibrary(let name): return "userLibrary \(name ?? "")"
-        case .iTunesSynced(let name): return "iTunesSync \(name)"
+        case let .cloudShared(name): return "cloudShared \(name)"
+        case let .userLibrary(name): return "userLibrary \(name ?? "")"
+        case let .iTunesSynced(name): return "iTunesSync \(name)"
         }
     }
 }
 
-
-fileprivate extension PHAssetMediaType {
-    
+private extension PHAssetMediaType {
     var name: String {
         switch self {
         case .image: return "image"
@@ -150,45 +146,43 @@ fileprivate extension PHAssetMediaType {
             return "unknown"
         }
     }
-    
 }
 
-fileprivate extension PHAssetMediaSubtype {
+private extension PHAssetMediaSubtype {
     var names: [String] {
         var subtypes: [String] = []
-        
-        if self.contains(.photoPanorama) {
+
+        if contains(.photoPanorama) {
             subtypes.append("Photo Panorama")
         }
-        if self.contains(.photoHDR) {
+        if contains(.photoHDR) {
             subtypes.append("Photo HDR")
         }
-        if #available(iOS 9.0, *), self.contains(.photoScreenshot) {
+        if #available(iOS 9.0, *), contains(.photoScreenshot) {
             subtypes.append("Photo Screenshot")
         }
-        if #available(iOS 9.1, *), self.contains(.photoLive) {
+        if #available(iOS 9.1, *), contains(.photoLive) {
             subtypes.append("Photo Live")
         }
-        if #available(iOS 10.2, *), self.contains(.photoDepthEffect) {
+        if #available(iOS 10.2, *), contains(.photoDepthEffect) {
             subtypes.append("Photo Depth Effect")
         }
-        if self.contains(.videoStreamed) {
+        if contains(.videoStreamed) {
             subtypes.append("Video Streamed")
         }
-        if self.contains(.videoHighFrameRate) {
+        if contains(.videoHighFrameRate) {
             subtypes.append("Video High Frame Rate")
         }
-        if self.contains(.videoTimelapse) {
+        if contains(.videoTimelapse) {
             subtypes.append("Video Timelapse")
         }
-        if #available(iOS 15.0, *), self.contains(.videoCinematic) {
+        if #available(iOS 15.0, *), contains(.videoCinematic) {
             subtypes.append("Video Cinematic")
         }
         if subtypes.isEmpty {
             subtypes.append("None")
         }
-        
+
         return subtypes
-        
     }
 }

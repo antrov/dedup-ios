@@ -1,0 +1,37 @@
+included:
+  - DeDuP
+  - DeDuPTests
+
+excluded:
+  - dedup_grid
+
+opt_in_rules:
+  - empty_count
+  - closure_spacing
+  - contains_over_first_not_nil
+  - fatal_error_message
+  - first_where
+  - force_unwrapping
+  - overridden_super_call
+  - redundant_nil_coalescing
+  - sorted_imports
+
+analyzer_rules:
+  - unused_import
+
+disabled_rules:
+  - todo
+
+force_cast: error
+
+line_length:
+  warning: 130
+  error: 160
+
+identifier_name:
+  min_length:
+    warning: 2
+  excluded:
+    - id
+
+reporter: xcode
