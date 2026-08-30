@@ -26,7 +26,7 @@ final class PhotosViewModel: ObservableObject {
     }
 
     @Published private(set) var assetsGroups = [AssetsGroup]()
-    @Published var distanceThreshold: Double = 4.0
+    @Published var distanceThreshold: Int = 4
     @Published private(set) var progress: Double = 0.0
     @Published var sorting = GroupsSorting.oldestToNewest {
         didSet { applySorting() }
@@ -62,7 +62,7 @@ final class PhotosViewModel: ObservableObject {
     }
 
     func rebuildGroups() {
-        groups = groupAssets(assets, by: OSHashDistanceType(distanceThreshold), filters: filters).sorted()
+        groups = groupAssets(assets, by: distanceThreshold, filters: filters).sorted()
         applySorting()
     }
 
@@ -101,8 +101,9 @@ final class PhotosViewModel: ObservableObject {
         }
     }
 
-    private func groupAssets(_ assets: [Asset], by maxDistance: OSHashDistanceType, filters: AssetsFilter) -> [AssetsGroup] {
-        assets
+    private func groupAssets(_ assets: [Asset], by maxDistance: Int, filters: AssetsFilter) -> [AssetsGroup] {
+        let threshold = OSHashDistanceType(maxDistance)
+        return assets
             .enumerated()
             .reduce([AssetsGroup]()) { groups, element in
                 let asset = element.element
@@ -113,7 +114,7 @@ final class PhotosViewModel: ObservableObject {
 
                 guard Self.isIncluded(asset: asset.libraryAsset, filters: filters) else { return groups }
                 var groups = groups
-                if let nearest = groups.nearestGroup(to: asset.pHash, using: hashing), nearest.distance < maxDistance {
+                if let nearest = groups.nearestGroup(to: asset.pHash, using: hashing), nearest.distance <= threshold {
                     nearest.group.addAsset(asset)
                 } else {
                     groups.append(AssetsGroup(asset: asset))
