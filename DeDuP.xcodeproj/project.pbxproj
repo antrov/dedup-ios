@@ -7,6 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		23D8F7EF472C4C018927E8B4 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = A01230C87F384BAA8889206B /* GRDB */; };
+		E17B517E0FDE4A389651B118 /* HashStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1E49D53BA6E485A8A97DA49 /* HashStore.swift */; };
+		FEE378B253184A1AAFBD52BE /* HashRecord.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD95E132CFF9489D9557D52A /* HashRecord.swift */; };
+		694021DED5D94D8EBB80EECD /* AppDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4300787CF384062A2997EF3 /* AppDatabase.swift */; };
+		C40B1E2A5A2646738847F40D /* SQLiteHashStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5FA6186AF49D40618E0976A2 /* SQLiteHashStore.swift */; };
+		6232FB02AF6A4D3586475612 /* HashStoreMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC0C432FF47349F1A55F4065 /* HashStoreMock.swift */; };
+		C96299A5CC6F43F89E2150C9 /* HashStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55CEF4A7D164476FA0E39224 /* HashStoreTests.swift */; };
 		0C73E92DD56DC1FA51755D12 /* PhotoLibraryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6151087A531365F892A49C0E /* PhotoLibraryService.swift */; };
 		0E9F5142BAD32C3575AC1716 /* Meta.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDB6FA50E342900445433577 /* Meta.swift */; };
 		1ADC5302E8F426BD4889B0DE /* AsyncThumbnail.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4114F9B427A584FA161C315 /* AsyncThumbnail.swift */; };
@@ -44,6 +51,12 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		F1E49D53BA6E485A8A97DA49 /* HashStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HashStore.swift; sourceTree = "<group>"; };
+		AD95E132CFF9489D9557D52A /* HashRecord.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HashRecord.swift; sourceTree = "<group>"; };
+		A4300787CF384062A2997EF3 /* AppDatabase.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppDatabase.swift; sourceTree = "<group>"; };
+		5FA6186AF49D40618E0976A2 /* SQLiteHashStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SQLiteHashStore.swift; sourceTree = "<group>"; };
+		FC0C432FF47349F1A55F4065 /* HashStoreMock.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HashStoreMock.swift; sourceTree = "<group>"; };
+		55CEF4A7D164476FA0E39224 /* HashStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HashStoreTests.swift; sourceTree = "<group>"; };
 		1DF5D68DECA76136E4E026F5 /* FiltersView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FiltersView.swift; sourceTree = "<group>"; };
 		1F1FDC81E8972EC3DBA1C735 /* ReadHeight.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ReadHeight.swift; sourceTree = "<group>"; };
 		2AD918AE1A91F64206AA6990 /* PhotosViewModel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PhotosViewModel.swift; sourceTree = "<group>"; };
@@ -84,6 +97,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				D353C5562BF13CDD008B56B2 /* CocoaImageHashing in Frameworks */,
+				23D8F7EF472C4C018927E8B4 /* GRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -161,9 +175,22 @@
 			children = (
 				BADBF6A65E3EBBB94F6D1881 /* PhotoLibraryServiceMock.swift */,
 				C8750B4C2B391BC7C0E8A992 /* ImageHashingServiceMock.swift */,
+				FC0C432FF47349F1A55F4065 /* HashStoreMock.swift */,
 			);
 			name = Mocks;
 			path = Mocks;
+			sourceTree = "<group>";
+		};
+		A4AA970B090C4F7F85CB1CAA /* Storage */ = {
+			isa = PBXGroup;
+			children = (
+				F1E49D53BA6E485A8A97DA49 /* HashStore.swift */,
+				AD95E132CFF9489D9557D52A /* HashRecord.swift */,
+				A4300787CF384062A2997EF3 /* AppDatabase.swift */,
+				5FA6186AF49D40618E0976A2 /* SQLiteHashStore.swift */,
+			);
+			name = Storage;
+			path = Storage;
 			sourceTree = "<group>";
 		};
 		5D34E8E4C44F8B8AABF3A2F4 /* Hashing */ = {
@@ -201,6 +228,7 @@
 			children = (
 				D333592F2BFCE4FC0048CE99 /* DeDuPTests.swift */,
 				E6AA3CC193F406A4A704183D /* PHashTests.swift */,
+				55CEF4A7D164476FA0E39224 /* HashStoreTests.swift */,
 			);
 			path = DeDuPTests;
 			sourceTree = "<group>";
@@ -231,6 +259,7 @@
 				D3AB0F3C2BECCDD40078DBF2 /* Preview Content */,
 				837A38F0C3A0884ADF9C7420 /* Models */,
 				5D34E8E4C44F8B8AABF3A2F4 /* Hashing */,
+				A4AA970B090C4F7F85CB1CAA /* Storage */,
 				0E8B86ADE72BA5E54AE18F78 /* Services */,
 				4962B23733625576CEFD0B0C /* Mocks */,
 				3310FD9F747EE7EC6CE0EE39 /* PhotosFlow */,
@@ -286,6 +315,7 @@
 			name = DeDuP;
 			packageProductDependencies = (
 				D353C5552BF13CDD008B56B2 /* CocoaImageHashing */,
+				A01230C87F384BAA8889206B /* GRDB */,
 			);
 			productName = DeDuP;
 			productReference = D3AB0F332BECCDD30078DBF2 /* DeDuP.app */;
@@ -321,6 +351,7 @@
 			mainGroup = D3AB0F2A2BECCDD30078DBF2;
 			packageReferences = (
 				D353C5542BF13CDD008B56B2 /* XCRemoteSwiftPackageReference "cocoaimagehashing" */,
+				5D5B9C037FD34A2499D2EFF7 /* XCRemoteSwiftPackageReference "GRDB.swift" */,
 			);
 			productRefGroup = D3AB0F342BECCDD30078DBF2 /* Products */;
 			projectDirPath = "";
@@ -358,6 +389,7 @@
 			files = (
 				D33359302BFCE4FC0048CE99 /* DeDuPTests.swift in Sources */,
 				F5599059A0B99E0F87865FFE /* PHashTests.swift in Sources */,
+				C96299A5CC6F43F89E2150C9 /* HashStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -384,6 +416,11 @@
 				8648E6A0E54F0C773EA52B69 /* DetailsView.swift in Sources */,
 				5654C81ABA7314D997BB86C5 /* MetaField.swift in Sources */,
 				BF82169970203A98DD0B5CE4 /* ReadHeight.swift in Sources */,
+				E17B517E0FDE4A389651B118 /* HashStore.swift in Sources */,
+				FEE378B253184A1AAFBD52BE /* HashRecord.swift in Sources */,
+				694021DED5D94D8EBB80EECD /* AppDatabase.swift in Sources */,
+				C40B1E2A5A2646738847F40D /* SQLiteHashStore.swift in Sources */,
+				6232FB02AF6A4D3586475612 /* HashStoreMock.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -656,6 +693,14 @@
 				minimumVersion = 1.9.0;
 			};
 		};
+		5D5B9C037FD34A2499D2EFF7 /* XCRemoteSwiftPackageReference "GRDB.swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/groue/GRDB.swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 7.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -663,6 +708,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D353C5542BF13CDD008B56B2 /* XCRemoteSwiftPackageReference "cocoaimagehashing" */;
 			productName = CocoaImageHashing;
+		};
+		A01230C87F384BAA8889206B /* GRDB */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 5D5B9C037FD34A2499D2EFF7 /* XCRemoteSwiftPackageReference "GRDB.swift" */;
+			productName = GRDB;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
