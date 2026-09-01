@@ -35,7 +35,6 @@ protocol ImageHashingServiceProtocol {
     /// the asset from iCloud when it isn't stored locally (W-19) — regular scans always pass
     /// `false` (B-06); only the explicit "fetch missing" retry action passes `true`.
     func hash(for asset: LibraryAsset, allowsNetworkAccess: Bool) async -> HashOutcome
-    func distance(_ lhs: OSHashType, _ rhs: OSHashType) -> OSHashDistanceType
 }
 
 final class ImageHashingService: ImageHashingServiceProtocol {
@@ -112,10 +111,6 @@ final class ImageHashingService: ImageHashingServiceProtocol {
                 }
             }
         }
-    }
-
-    func distance(_ lhs: OSHashType, _ rhs: OSHashType) -> OSHashDistanceType {
-        OSImageHashing.sharedInstance().hashDistance(lhs, to: rhs, with: .pHash)
     }
 
     private static func outcome(image: UIImage?, info: [AnyHashable: Any]?) -> HashOutcome {

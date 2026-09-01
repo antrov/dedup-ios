@@ -37,4 +37,20 @@ enum PHash {
     static func isValid(_ hash: UInt64) -> Bool {
         hash & alwaysZeroMask == 0
     }
+
+    /// Largest Hamming distance between any two of `hashes` (W-33) — a signal of the chain
+    /// effect (2.4): a group whose diameter is much larger than the threshold that produced it
+    /// likely only holds together through a chain of intermediaries, not because every pair in
+    /// it actually looks alike. Groups are small (units to tens of elements), so the all-pairs
+    /// cost here is negligible.
+    static func diameter(of hashes: [UInt64]) -> Int {
+        guard hashes.count > 1 else { return 0 }
+        var result = 0
+        for i in hashes.indices {
+            for j in (i + 1) ..< hashes.count {
+                result = max(result, distance(hashes[i], hashes[j]))
+            }
+        }
+        return result
+    }
 }

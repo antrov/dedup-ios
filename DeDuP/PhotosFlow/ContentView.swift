@@ -53,7 +53,11 @@ struct ContentView: View {
                 iCloudIncluded: iCloudIncludedBinding,
                 progress: viewModel.progress,
                 cloudOnlyCount: viewModel.processingCounts.cloudOnly,
-                onThresholdCommitted: viewModel.rebuildGroups,
+                onThresholdCommitted: {
+                    Task {
+                        await viewModel.rebuildGroups()
+                    }
+                },
                 onFetchCloudOnlyRequested: {
                     Task {
                         await viewModel.retryCloudOnlyAssets()

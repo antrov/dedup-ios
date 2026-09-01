@@ -7,28 +7,34 @@
 
 import Foundation
 
-/// A cluster of visually similar assets. Pure container - grouping/matching logic lives in
-/// PhotosViewModel, which is the only layer that knows about the hashing service.
+/// A cluster of visually similar assets (section 2 of the requirements doc) — a connected
+/// component of the similarity graph. Pure container: the grouping logic that decides which
+/// assets end up together lives in `GroupingEngine`, not here.
 class AssetsGroup: Equatable, Comparable, Identifiable {
-    let id: UUID
-    var assets: [Asset]
-    var creationDate: ClosedRange<Date>?
+    /// Sorted deterministically by creation date, falling back to identifier for ties or missing
+    /// dates (W-31) — never by the order hashing/grouping tasks happened to finish in.
+    let assets: [Asset]
+    let creationDate: ClosedRange<Date>?
 
-    init(asset: Asset) {
-        assets = [asset]
-        id = UUID()
-        creationDate = Self.creationDateOfAssets([asset])
+    /// Stable across re-groupings of the same data (W-30): the lexicographically smallest member
+    /// identifier, never a freshly generated UUID. This is what lets the SwiftUI list keep this
+    /// group's identity — scroll position, animations — across a re-threshold instead of tearing
+    /// down and rebuilding every row every time (B-14).
+    var id: String {
+        assets.map(\.id).min() ?? ""
+    }
+
+    /// Largest Hamming distance between any two members (W-33) — shown in the details view as a
+    /// signal of the chain effect (2.4).
+    var diameter: Int {
+        PHash.diameter(of: assets.map(\.pHash))
     }
 
     init(assets: [Asset]) {
-        self.assets = assets
-        id = UUID()
-        creationDate = Self.creationDateOfAssets(assets)
-    }
-
-    func addAsset(_ asset: Asset) {
-        assets.append(asset)
-        creationDate = Self.creationDateOfAssets(assets)
+        self.assets = assets.sorted {
+            ($0.creationDate ?? .distantPast, $0.id) < ($1.creationDate ?? .distantPast, $1.id)
+        }
+        creationDate = Self.creationDateOfAssets(self.assets)
     }
 
     private static func creationDateOfAssets(_ assets: [Asset]) -> ClosedRange<Date>? {
@@ -37,9 +43,10 @@ class AssetsGroup: Equatable, Comparable, Identifiable {
         return minDate ... maxDate
     }
 
+    /// Tie-broken by `id` (W-31) instead of a random UUID, so groups with equal (or missing)
+    /// creation dates still sort the same way every time.
     static func < (lhs: AssetsGroup, rhs: AssetsGroup) -> Bool {
-        guard let ldate = lhs.creationDate, let rdate = rhs.creationDate else { return lhs.id < rhs.id }
-        return ldate.lowerBound < rdate.lowerBound
+        (lhs.creationDate?.lowerBound ?? .distantPast, lhs.id) < (rhs.creationDate?.lowerBound ?? .distantPast, rhs.id)
     }
 
     static func == (lhs: AssetsGroup, rhs: AssetsGroup) -> Bool {
