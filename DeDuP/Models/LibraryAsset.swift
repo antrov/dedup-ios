@@ -12,7 +12,6 @@ import Photos
 struct LibraryAsset: Hashable, CustomStringConvertible {
     let asset: PHAsset
     let collection: PHAssetCollection?
-    let idx: Int
 
     var description: String {
         [asset.creationDate?.formatted(), collection?.localizedTitle].compactMap { $0 }.joined(separator: " - ")

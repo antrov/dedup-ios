@@ -47,7 +47,7 @@ class AssetMock: Asset {
 
     init() {
         super.init(
-            libraryAsset: LibraryAsset(asset: PHAsset(), collection: nil, idx: 0),
+            libraryAsset: LibraryAsset(asset: PHAsset(), collection: nil),
             pHash: 0,
             photoLibrary: PhotoLibraryServiceMock()
         )

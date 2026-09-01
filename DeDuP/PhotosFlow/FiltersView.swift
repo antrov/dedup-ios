@@ -13,7 +13,9 @@ struct FiltersView: View {
     @Binding var distanceThreshold: Int
     @Binding var iCloudIncluded: Bool
     let progress: Double
+    let cloudOnlyCount: Int
     let onThresholdCommitted: () -> Void
+    let onFetchCloudOnlyRequested: () -> Void
 
     private var thresholdBinding: Binding<Double> {
         Binding(
@@ -37,6 +39,16 @@ struct FiltersView: View {
             Toggle(isOn: $iCloudIncluded) {
                 Text("Include iCloud Shared Albums")
             }
+            if cloudOnlyCount > 0 {
+                HStack {
+                    Text("\(cloudOnlyCount) photo(s) available only in iCloud")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Fetch from iCloud", action: onFetchCloudOnlyRequested)
+                        .font(.footnote)
+                }
+            }
         }
         .contentMargins(8)
         .padding(.top)
@@ -48,6 +60,8 @@ struct FiltersView: View {
         distanceThreshold: .constant(4),
         iCloudIncluded: .constant(true),
         progress: 0.6,
-        onThresholdCommitted: {}
+        cloudOnlyCount: 3,
+        onThresholdCommitted: {},
+        onFetchCloudOnlyRequested: {}
     )
 }

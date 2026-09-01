@@ -52,7 +52,13 @@ struct ContentView: View {
                 distanceThreshold: $viewModel.distanceThreshold,
                 iCloudIncluded: iCloudIncludedBinding,
                 progress: viewModel.progress,
-                onThresholdCommitted: viewModel.rebuildGroups
+                cloudOnlyCount: viewModel.processingCounts.cloudOnly,
+                onThresholdCommitted: viewModel.rebuildGroups,
+                onFetchCloudOnlyRequested: {
+                    Task {
+                        await viewModel.retryCloudOnlyAssets()
+                    }
+                }
             )
             .presentationDragIndicator(.visible)
             .readHeight()
@@ -124,6 +130,7 @@ struct ContentView: View {
 #Preview("With mocked data") {
     ContentView(viewModel: PhotosViewModel(
         photoLibrary: PhotoLibraryServiceMock(),
-        hashing: ImageHashingServiceMock()
+        hashing: ImageHashingServiceMock(),
+        hashStore: HashStoreMock()
     ))
 }

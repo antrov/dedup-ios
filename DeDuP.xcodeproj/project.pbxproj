@@ -38,6 +38,10 @@
 		D3AB0F3B2BECCDD40078DBF2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D3AB0F3A2BECCDD40078DBF2 /* Assets.xcassets */; };
 		D3AB0F3E2BECCDD40078DBF2 /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = D3AB0F3D2BECCDD40078DBF2 /* Preview Assets.xcassets */; };
 		D9FB2E80DC612DF4912EF0EF /* AssetsGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB6B8E2F894AEBD305293661 /* AssetsGroup.swift */; };
+		D0369E1826FF4B7C9B46ED57 /* BoundedConcurrency.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE41199DEF6C49F2B25C024E /* BoundedConcurrency.swift */; };
+		7BB3C0F1F30A4AAF990B6DE9 /* BoundedConcurrencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C7F9AEFBE474A2281CB715E /* BoundedConcurrencyTests.swift */; };
+		3921EC25D3644078BBA69F7A /* PhotosViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8121446649034AD7A5FD1E09 /* PhotosViewModelTests.swift */; };
+		C27CD310797E41C8A1354068 /* HashingConversionCostTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F566C4C5EE9A4EC18EA1C820 /* HashingConversionCostTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -82,6 +86,10 @@
 		F4114F9B427A584FA161C315 /* AsyncThumbnail.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AsyncThumbnail.swift; sourceTree = "<group>"; };
 		959C26DCC53C5D34A7E9AB57 /* PHash.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PHash.swift; sourceTree = "<group>"; };
 		E6AA3CC193F406A4A704183D /* PHashTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PHashTests.swift; sourceTree = "<group>"; };
+		DE41199DEF6C49F2B25C024E /* BoundedConcurrency.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BoundedConcurrency.swift; sourceTree = "<group>"; };
+		2C7F9AEFBE474A2281CB715E /* BoundedConcurrencyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundedConcurrencyTests.swift; sourceTree = "<group>"; };
+		8121446649034AD7A5FD1E09 /* PhotosViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotosViewModelTests.swift; sourceTree = "<group>"; };
+		F566C4C5EE9A4EC18EA1C820 /* HashingConversionCostTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HashingConversionCostTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -218,6 +226,7 @@
 			isa = PBXGroup;
 			children = (
 				1F1FDC81E8972EC3DBA1C735 /* ReadHeight.swift */,
+				DE41199DEF6C49F2B25C024E /* BoundedConcurrency.swift */,
 			);
 			name = Utilities;
 			path = Utilities;
@@ -229,6 +238,9 @@
 				D333592F2BFCE4FC0048CE99 /* DeDuPTests.swift */,
 				E6AA3CC193F406A4A704183D /* PHashTests.swift */,
 				55CEF4A7D164476FA0E39224 /* HashStoreTests.swift */,
+				2C7F9AEFBE474A2281CB715E /* BoundedConcurrencyTests.swift */,
+				8121446649034AD7A5FD1E09 /* PhotosViewModelTests.swift */,
+				F566C4C5EE9A4EC18EA1C820 /* HashingConversionCostTests.swift */,
 			);
 			path = DeDuPTests;
 			sourceTree = "<group>";
@@ -390,6 +402,9 @@
 				D33359302BFCE4FC0048CE99 /* DeDuPTests.swift in Sources */,
 				F5599059A0B99E0F87865FFE /* PHashTests.swift in Sources */,
 				C96299A5CC6F43F89E2150C9 /* HashStoreTests.swift in Sources */,
+				7BB3C0F1F30A4AAF990B6DE9 /* BoundedConcurrencyTests.swift in Sources */,
+				3921EC25D3644078BBA69F7A /* PhotosViewModelTests.swift in Sources */,
+				C27CD310797E41C8A1354068 /* HashingConversionCostTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -421,6 +436,7 @@
 				694021DED5D94D8EBB80EECD /* AppDatabase.swift in Sources */,
 				C40B1E2A5A2646738847F40D /* SQLiteHashStore.swift in Sources */,
 				6232FB02AF6A4D3586475612 /* HashStoreMock.swift in Sources */,
+				D0369E1826FF4B7C9B46ED57 /* BoundedConcurrency.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

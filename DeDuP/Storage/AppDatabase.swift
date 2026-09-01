@@ -36,6 +36,19 @@ final class AppDatabase {
         try AppDatabase(dbQueue: DatabaseQueue())
     }
 
+    /// Convenience for default dependency-injection call sites (W-14): falls back to an
+    /// in-memory database if the on-disk cache can't be opened, so a persistence failure never
+    /// prevents the app from launching — it just loses the cache for that run.
+    static func openOnDiskOrInMemory() -> AppDatabase {
+        if let onDisk = try? openOnDisk() {
+            return onDisk
+        }
+        if let inMemory = try? openInMemory() {
+            return inMemory
+        }
+        fatalError("Unable to open even an in-memory SQLite database")
+    }
+
     private static func cacheDirectoryURL() throws -> URL {
         let applicationSupport = try FileManager.default.url(
             for: .applicationSupportDirectory,

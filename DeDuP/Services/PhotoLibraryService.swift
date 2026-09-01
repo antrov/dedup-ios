@@ -19,6 +19,16 @@ protocol PhotoLibraryServiceProtocol {
 }
 
 final class PhotoLibraryService: PhotoLibraryServiceProtocol {
+    /// "Images only" applied at the fetch-options level, on every path that pulls assets out of
+    /// the library (W-20) — previously only the iCloud-shared-album path filtered by media type,
+    /// so videos from regular albums reached the hashing service and were rejected there instead
+    /// (B-17).
+    private static let imageOnlyOptions: PHFetchOptions = {
+        let options = PHFetchOptions()
+        options.predicate = NSPredicate(format: "mediaType = %d", PHAssetMediaType.image.rawValue)
+        return options
+    }()
+
     private let imageManager = PHCachingImageManager()
 
     func requestAuthorization() async -> PHAuthorizationStatus {
@@ -42,30 +52,26 @@ final class PhotoLibraryService: PhotoLibraryServiceProtocol {
         var assets = Set<LibraryAsset>()
         let fetchOptions = PHFetchOptions()
         fetchOptions.includeAssetSourceTypes = [.typeUserLibrary, .typeiTunesSynced]
-        var idx = 0
+        fetchOptions.predicate = Self.imageOnlyOptions.predicate
 
         PHAssetCollection
             .fetchAssetCollections(with: .album, subtype: .albumRegular, options: nil)
             .enumerateObjects { collection, _, _ in
-                PHAsset.fetchAssets(in: collection, options: nil).enumerateObjects { asset, _, _ in
-                    idx += 1
-                    assets.insert(LibraryAsset(asset: asset, collection: collection, idx: idx))
+                PHAsset.fetchAssets(in: collection, options: Self.imageOnlyOptions).enumerateObjects { asset, _, _ in
+                    assets.insert(LibraryAsset(asset: asset, collection: collection))
                 }
             }
 
         PHAssetCollection
             .fetchAssetCollections(with: .album, subtype: .albumCloudShared, options: nil)
             .enumerateObjects { collection, _, _ in
-                PHAsset.fetchAssets(in: collection, options: nil).enumerateObjects { asset, _, _ in
-                    guard asset.mediaType == .image else { return }
-                    idx += 1
-                    assets.insert(LibraryAsset(asset: asset, collection: collection, idx: idx))
+                PHAsset.fetchAssets(in: collection, options: Self.imageOnlyOptions).enumerateObjects { asset, _, _ in
+                    assets.insert(LibraryAsset(asset: asset, collection: collection))
                 }
             }
 
         PHAsset.fetchAssets(with: .image, options: fetchOptions).enumerateObjects { asset, _, _ in
-            idx += 1
-            assets.insert(LibraryAsset(asset: asset, collection: nil, idx: idx))
+            assets.insert(LibraryAsset(asset: asset, collection: nil))
         }
 
         return assets
