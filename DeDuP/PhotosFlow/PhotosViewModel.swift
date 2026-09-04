@@ -168,19 +168,20 @@ final class PhotosViewModel: ObservableObject {
 
         try? await hashStore.saveGroupAssignments(Self.groupAssignments(for: identifiers, in: domainGroups))
 
-        let newGroups = domainGroups
-            .map { AssetsGroup(assets: $0.memberIdentifiers.compactMap { assetsByID[$0] }) }
-            .sorted()
-        await setGroups(newGroups)
+        await setGroups(from: domainGroups, assetsByID: assetsByID)
     }
 
-    /// Applies the finished grouping result on the main actor (W-34): `rebuildGroups` resumes
-    /// from `Task.detached` on an arbitrary background executor, so mutating `groups` — and
-    /// constructing the `AssetsGroup`/`Asset` UI models it holds — must be hopped here rather
-    /// than done inline right after the `await`.
+    /// Maps the finished grouping result onto `AssetsGroup`/`Asset` UI models and applies it, on
+    /// the main actor (W-34). `rebuildGroups` resumes from `Task.detached` on an arbitrary
+    /// background executor, so the mapping itself — not just the final `groups` assignment — has
+    /// to happen inside this hop, not before it: building `AssetsGroup` earlier in
+    /// `rebuildGroups` and only assigning the result here would still leave the UI-model
+    /// construction running off the main actor.
     @MainActor
-    private func setGroups(_ newGroups: [AssetsGroup]) {
-        groups = newGroups
+    private func setGroups(from domainGroups: [GroupingEngine.Group], assetsByID: [String: Asset]) {
+        groups = domainGroups
+            .map { AssetsGroup(assets: $0.memberIdentifiers.compactMap { assetsByID[$0] }) }
+            .sorted()
         applySorting()
     }
 
