@@ -7,7 +7,6 @@
 
 #if DEBUG
 
-    import CocoaImageHashing
     import Foundation
 
     final class ImageHashingServiceMock: ImageHashingServiceProtocol {
@@ -24,7 +23,6 @@
         }
 
         var outcomeToReturn: HashOutcome = .computed(0)
-        var distanceToReturn: OSHashDistanceType = 0
 
         private let callLog = CallLog()
 
@@ -39,10 +37,6 @@
         func hash(for _: LibraryAsset, allowsNetworkAccess: Bool) async -> HashOutcome {
             await callLog.record(allowsNetworkAccess: allowsNetworkAccess)
             return outcomeToReturn
-        }
-
-        func distance(_: OSHashType, _: OSHashType) -> OSHashDistanceType {
-            distanceToReturn
         }
     }
 

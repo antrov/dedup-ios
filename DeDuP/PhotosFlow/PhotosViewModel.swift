@@ -5,7 +5,6 @@
 //  Created by Hubert Andrzejewski on 09/05/2024.
 //
 
-import CocoaImageHashing
 import Foundation
 import Photos
 
@@ -55,12 +54,13 @@ final class PhotosViewModel: ObservableObject {
     }
 
     @Published var filters: AssetsFilter = [.iCloudIncluded] {
-        didSet { Task.detached { self.rebuildGroups() } }
+        didSet { Task { await self.rebuildGroups() } }
     }
 
     private let photoLibrary: PhotoLibraryServiceProtocol
     private let hashing: ImageHashingServiceProtocol
     private let hashStore: HashStore
+    private let groupingEngine: GroupingEngine
 
     /// Bounded concurrency window for hash computation (W-15): the number of PhotoKit image
     /// requests in flight at once, on the order of the core count and capped well below "one
@@ -81,11 +81,13 @@ final class PhotosViewModel: ObservableObject {
     init(
         photoLibrary: PhotoLibraryServiceProtocol = PhotoLibraryService(),
         hashing: ImageHashingServiceProtocol = ImageHashingService(),
-        hashStore: HashStore = SQLiteHashStore(database: .openOnDiskOrInMemory())
+        hashStore: HashStore = SQLiteHashStore(database: .openOnDiskOrInMemory()),
+        groupingEngine: GroupingEngine = GroupingEngine()
     ) {
         self.photoLibrary = photoLibrary
         self.hashing = hashing
         self.hashStore = hashStore
+        self.groupingEngine = groupingEngine
         Task.detached {
             await self.fetch()
         }
@@ -105,7 +107,7 @@ final class PhotosViewModel: ObservableObject {
         await refreshProcessingCounts()
 
         await setScanPhase(.grouping)
-        rebuildGroups()
+        await rebuildGroups()
         await setScanPhase(.idle)
     }
 
@@ -128,19 +130,75 @@ final class PhotosViewModel: ObservableObject {
         let newAssets = freshRecords.compactMap { record -> Asset? in
             guard record.state == .computed, let phash = record.phash,
                   let libraryAsset = byIdentifier[record.localIdentifier] else { return nil }
-            return Asset(libraryAsset: libraryAsset, pHash: OSHashType(bitPattern: phash), photoLibrary: photoLibrary)
+            return Asset(libraryAsset: libraryAsset, pHash: phash, photoLibrary: photoLibrary)
         }
         assets.append(contentsOf: newAssets)
         await refreshProcessingCounts()
 
         await setScanPhase(.grouping)
-        rebuildGroups()
+        await rebuildGroups()
         await setScanPhase(.idle)
     }
 
-    func rebuildGroups() {
-        groups = groupAssets(assets, by: distanceThreshold, filters: filters).sorted()
+    /// Rebuilds `groups` from the currently loaded `assets` via `GroupingEngine` (W-26…W-36):
+    /// the filter is applied to the input set before grouping rather than inside it (W-35), the
+    /// actual pairing and connected-component work happens off the main actor on flat
+    /// identifier/hash arrays (W-34), and only the finished result is mapped back onto
+    /// `Asset`/`AssetsGroup` here.
+    func rebuildGroups() async {
+        let filteredAssets = assets.filter { Self.isIncluded(asset: $0.libraryAsset, filters: filters) }
+        let identifiers = filteredAssets.map(\.id)
+        let hashes = filteredAssets.map(\.pHash)
+        let threshold = distanceThreshold
+        let assetsByID = Dictionary(uniqueKeysWithValues: filteredAssets.map { ($0.id, $0) })
+
+        let domainGroups: [GroupingEngine.Group]
+        do {
+            domainGroups = try await Task.detached(priority: .userInitiated) { [groupingEngine] in
+                try await groupingEngine.makeGroups(identifiers: identifiers, hashes: hashes, threshold: threshold)
+            }.value
+        } catch {
+            // Cancelled (a fresher regroup superseded this one) or failed: leave the last known
+            // groups and their persisted group_id assignments untouched. Turning "the engine
+            // didn't finish" into an empty result here would write `nil` group_id for every
+            // considered identifier below, wiping out the last valid assignment on every
+            // cancelled regroup instead of just skipping it.
+            return
+        }
+
+        try? await hashStore.saveGroupAssignments(Self.groupAssignments(for: identifiers, in: domainGroups))
+
+        await setGroups(from: domainGroups, assetsByID: assetsByID)
+    }
+
+    /// Maps the finished grouping result onto `AssetsGroup`/`Asset` UI models and applies it, on
+    /// the main actor (W-34). `rebuildGroups` resumes from `Task.detached` on an arbitrary
+    /// background executor, so the mapping itself — not just the final `groups` assignment — has
+    /// to happen inside this hop, not before it: building `AssetsGroup` earlier in
+    /// `rebuildGroups` and only assigning the result here would still leave the UI-model
+    /// construction running off the main actor.
+    @MainActor
+    private func setGroups(from domainGroups: [GroupingEngine.Group], assetsByID: [String: Asset]) {
+        groups = domainGroups
+            .map { AssetsGroup(assets: $0.memberIdentifiers.compactMap { assetsByID[$0] }) }
+            .sorted()
         applySorting()
+    }
+
+    /// Every considered identifier mapped to its new group id, or `nil` if it didn't end up in
+    /// any group (W-36) — written back in the same single batched call so an identifier dropped
+    /// from a group doesn't keep pointing at one that no longer contains it.
+    private static func groupAssignments(
+        for identifiers: [String],
+        in domainGroups: [GroupingEngine.Group]
+    ) -> [String: String?] {
+        var groupIDByIdentifier: [String: String] = [:]
+        for domainGroup in domainGroups {
+            for identifier in domainGroup.memberIdentifiers {
+                groupIDByIdentifier[identifier] = domainGroup.id
+            }
+        }
+        return Dictionary(uniqueKeysWithValues: identifiers.map { ($0, groupIDByIdentifier[$0]) })
     }
 
     func deleteAsset(_ asset: Asset) async {
@@ -150,36 +208,13 @@ final class PhotosViewModel: ObservableObject {
             print(error)
         }
         assets.removeAll { $0 == asset }
-        rebuildGroups()
+        await rebuildGroups()
     }
 
     private func applySorting() {
         DispatchQueue.main.async {
             self.assetsGroups = self.sorting == .oldestToNewest ? self.groups : self.groups.reversed()
         }
-    }
-
-    private func groupAssets(_ assets: [Asset], by maxDistance: Int, filters: AssetsFilter) -> [AssetsGroup] {
-        let threshold = OSHashDistanceType(maxDistance)
-        return assets
-            .enumerated()
-            .reduce([AssetsGroup]()) { groups, element in
-                let asset = element.element
-                let index = element.offset
-                DispatchQueue.main.async {
-                    self.progress = Double(index) / Double(assets.count)
-                }
-
-                guard Self.isIncluded(asset: asset.libraryAsset, filters: filters) else { return groups }
-                var groups = groups
-                if let nearest = groups.nearestGroup(to: asset.pHash, using: hashing), nearest.distance <= threshold {
-                    nearest.group.addAsset(asset)
-                } else {
-                    groups.append(AssetsGroup(asset: asset))
-                }
-                return groups
-            }
-            .filter { $0.assets.count > 1 }
     }
 
     private static func isIncluded(asset: LibraryAsset, filters: AssetsFilter) -> Bool {
@@ -220,7 +255,7 @@ private extension PhotosViewModel {
         return orderedAssets.compactMap { libraryAsset in
             guard let record = recordsByID[libraryAsset.asset.localIdentifier],
                   record.state == .computed, let phash = record.phash else { return nil }
-            return Asset(libraryAsset: libraryAsset, pHash: OSHashType(bitPattern: phash), photoLibrary: photoLibrary)
+            return Asset(libraryAsset: libraryAsset, pHash: phash, photoLibrary: photoLibrary)
         }
     }
 
@@ -344,18 +379,5 @@ private extension PhotosViewModel {
     @MainActor
     func setProcessingCounts(_ counts: ProcessingCounts) {
         processingCounts = counts
-    }
-}
-
-private extension Array where Element == AssetsGroup {
-    func nearestGroup(
-        to pHash: OSHashType,
-        using hashing: ImageHashingServiceProtocol
-    ) -> (group: AssetsGroup, distance: OSHashDistanceType)? {
-        let distances = map { group in
-            group.assets.first.map { hashing.distance($0.pHash, pHash) } ?? OSHashDistanceType.max
-        }
-        guard let offset = distances.indices.min(by: { distances[$0] < distances[$1] }) else { return nil }
-        return (self[offset], distances[offset])
     }
 }

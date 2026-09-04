@@ -42,6 +42,13 @@
 		7BB3C0F1F30A4AAF990B6DE9 /* BoundedConcurrencyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2C7F9AEFBE474A2281CB715E /* BoundedConcurrencyTests.swift */; };
 		3921EC25D3644078BBA69F7A /* PhotosViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8121446649034AD7A5FD1E09 /* PhotosViewModelTests.swift */; };
 		C27CD310797E41C8A1354068 /* HashingConversionCostTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F566C4C5EE9A4EC18EA1C820 /* HashingConversionCostTests.swift */; };
+		B03D830BA8A0D2DDF592194E /* PairFinder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 892EA71C38B5A50204D83D79 /* PairFinder.swift */; };
+		FC31CC1251CDAB95E1ECF79A /* BruteForcePairFinder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7EB8CE3C4EB120EB100546C /* BruteForcePairFinder.swift */; };
+		7384CF39DC497A7FC57AD9A8 /* DisjointSet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19627AA8CC69D2EA5991396E /* DisjointSet.swift */; };
+		47DD3C546D772422AC2090E0 /* GroupingEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = AACCEB2CBD789A44D228EF9E /* GroupingEngine.swift */; };
+		7737B8182825C4A3CF253FA6 /* DisjointSetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 157CCCFDDD28313BFCFF6DC9 /* DisjointSetTests.swift */; };
+		72EF0A1B2C3D5FF65DC5C8DD /* PairFinderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26A2086573E1FEEA25FD58DA /* PairFinderTests.swift */; };
+		6B240E961FC270BC83BA2D75 /* GroupingEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DFFFCB62CCBC6476E57D065 /* GroupingEngineTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -90,6 +97,13 @@
 		2C7F9AEFBE474A2281CB715E /* BoundedConcurrencyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BoundedConcurrencyTests.swift; sourceTree = "<group>"; };
 		8121446649034AD7A5FD1E09 /* PhotosViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotosViewModelTests.swift; sourceTree = "<group>"; };
 		F566C4C5EE9A4EC18EA1C820 /* HashingConversionCostTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HashingConversionCostTests.swift; sourceTree = "<group>"; };
+		892EA71C38B5A50204D83D79 /* PairFinder.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PairFinder.swift; sourceTree = "<group>"; };
+		F7EB8CE3C4EB120EB100546C /* BruteForcePairFinder.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BruteForcePairFinder.swift; sourceTree = "<group>"; };
+		19627AA8CC69D2EA5991396E /* DisjointSet.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DisjointSet.swift; sourceTree = "<group>"; };
+		AACCEB2CBD789A44D228EF9E /* GroupingEngine.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GroupingEngine.swift; sourceTree = "<group>"; };
+		157CCCFDDD28313BFCFF6DC9 /* DisjointSetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisjointSetTests.swift; sourceTree = "<group>"; };
+		26A2086573E1FEEA25FD58DA /* PairFinderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairFinderTests.swift; sourceTree = "<group>"; };
+		6DFFFCB62CCBC6476E57D065 /* GroupingEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupingEngineTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -210,6 +224,18 @@
 			path = Hashing;
 			sourceTree = "<group>";
 		};
+		8D9D9A4EED49465DB173CC1C /* Grouping */ = {
+			isa = PBXGroup;
+			children = (
+				892EA71C38B5A50204D83D79 /* PairFinder.swift */,
+				F7EB8CE3C4EB120EB100546C /* BruteForcePairFinder.swift */,
+				19627AA8CC69D2EA5991396E /* DisjointSet.swift */,
+				AACCEB2CBD789A44D228EF9E /* GroupingEngine.swift */,
+			);
+			name = Grouping;
+			path = Grouping;
+			sourceTree = "<group>";
+		};
 		837A38F0C3A0884ADF9C7420 /* Models */ = {
 			isa = PBXGroup;
 			children = (
@@ -241,6 +267,9 @@
 				2C7F9AEFBE474A2281CB715E /* BoundedConcurrencyTests.swift */,
 				8121446649034AD7A5FD1E09 /* PhotosViewModelTests.swift */,
 				F566C4C5EE9A4EC18EA1C820 /* HashingConversionCostTests.swift */,
+				157CCCFDDD28313BFCFF6DC9 /* DisjointSetTests.swift */,
+				26A2086573E1FEEA25FD58DA /* PairFinderTests.swift */,
+				6DFFFCB62CCBC6476E57D065 /* GroupingEngineTests.swift */,
 			);
 			path = DeDuPTests;
 			sourceTree = "<group>";
@@ -272,6 +301,7 @@
 				837A38F0C3A0884ADF9C7420 /* Models */,
 				5D34E8E4C44F8B8AABF3A2F4 /* Hashing */,
 				A4AA970B090C4F7F85CB1CAA /* Storage */,
+				8D9D9A4EED49465DB173CC1C /* Grouping */,
 				0E8B86ADE72BA5E54AE18F78 /* Services */,
 				4962B23733625576CEFD0B0C /* Mocks */,
 				3310FD9F747EE7EC6CE0EE39 /* PhotosFlow */,
@@ -405,6 +435,9 @@
 				7BB3C0F1F30A4AAF990B6DE9 /* BoundedConcurrencyTests.swift in Sources */,
 				3921EC25D3644078BBA69F7A /* PhotosViewModelTests.swift in Sources */,
 				C27CD310797E41C8A1354068 /* HashingConversionCostTests.swift in Sources */,
+				7737B8182825C4A3CF253FA6 /* DisjointSetTests.swift in Sources */,
+				72EF0A1B2C3D5FF65DC5C8DD /* PairFinderTests.swift in Sources */,
+				6B240E961FC270BC83BA2D75 /* GroupingEngineTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -437,6 +470,10 @@
 				C40B1E2A5A2646738847F40D /* SQLiteHashStore.swift in Sources */,
 				6232FB02AF6A4D3586475612 /* HashStoreMock.swift in Sources */,
 				D0369E1826FF4B7C9B46ED57 /* BoundedConcurrency.swift in Sources */,
+				B03D830BA8A0D2DDF592194E /* PairFinder.swift in Sources */,
+				FC31CC1251CDAB95E1ECF79A /* BruteForcePairFinder.swift in Sources */,
+				7384CF39DC497A7FC57AD9A8 /* DisjointSet.swift in Sources */,
+				47DD3C546D772422AC2090E0 /* GroupingEngine.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

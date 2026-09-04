@@ -5,7 +5,6 @@
 //  Created by Hubert Andrzejewski on 09/05/2024.
 //
 
-import CocoaImageHashing
 import Foundation
 import UIKit
 
@@ -14,7 +13,10 @@ import UIKit
 class Asset: Equatable, ObservableObject, Identifiable {
     @Published var thumbnail: UIImage?
 
-    let pHash: OSHashType
+    /// CocoaImageHashing's 64-bit `OSHashType`, reduced to a plain `UInt64` (W-02): the grouping
+    /// layer works entirely in `Hashing/PHash.swift`'s own bit operations and never touches
+    /// `ImageHashingServiceProtocol.distance` or any other CocoaImageHashing type.
+    let pHash: UInt64
     let libraryAsset: LibraryAsset
 
     private let photoLibrary: PhotoLibraryServiceProtocol
@@ -33,7 +35,7 @@ class Asset: Equatable, ObservableObject, Identifiable {
 
     lazy var meta = Meta.create(from: libraryAsset.asset, collection: libraryAsset.collection)
 
-    init(libraryAsset: LibraryAsset, pHash: OSHashType, photoLibrary: PhotoLibraryServiceProtocol) {
+    init(libraryAsset: LibraryAsset, pHash: UInt64, photoLibrary: PhotoLibraryServiceProtocol) {
         self.libraryAsset = libraryAsset
         self.pHash = pHash
         self.photoLibrary = photoLibrary

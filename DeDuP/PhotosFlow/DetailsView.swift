@@ -61,6 +61,13 @@ struct DetailsView: View {
                 .safeAreaPadding(Self.itemsSpacing)
             }
             .toolbar {
+                // W-33: the group's diameter (largest pairwise distance among its members) is the
+                // one visible signal that a group only holds together through a chain of
+                // intermediaries (2.4) rather than every photo in it actually looking alike.
+                ToolbarItem(placement: .principal) {
+                    Text("Diameter: \(assetsGroup.diameter)")
+                        .font(.headline)
+                }
                 ToolbarItemGroup(placement: .bottomBar) {
                     Button {} label: {
                         Image(systemName: "square.and.arrow.up")
