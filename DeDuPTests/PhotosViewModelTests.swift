@@ -7,11 +7,8 @@
 import Photos
 import XCTest
 
+@MainActor
 final class PhotosViewModelTests: XCTestCase {
-    private func makeLibraryAsset() -> LibraryAsset {
-        LibraryAsset(asset: PHAsset(), collection: nil)
-    }
-
     // MARK: - W-16: cache-first, single bulk lookup
 
     func testValidCachedRecordIsNotRecomputed() async {
@@ -22,16 +19,10 @@ final class PhotosViewModelTests: XCTestCase {
         let libraryAsset = makeLibraryAsset()
         let identifier = libraryAsset.asset.localIdentifier
         photoLibrary.libraryAssets = [libraryAsset]
-        hashStore.records[identifier] = HashRecord(
-            localIdentifier: identifier,
+        hashStore.records[identifier] = makeHashRecord(
+            identifier: identifier,
             phash: 0x1111,
-            hashVersion: HashingPipeline.version,
-            modificationDate: libraryAsset.asset.modificationDate,
-            creationDate: libraryAsset.asset.creationDate,
-            state: .computed,
-            failureReason: nil,
-            groupID: nil,
-            updatedAt: Date()
+            modificationDate: libraryAsset.asset.modificationDate
         )
 
         let viewModel = PhotosViewModel(photoLibrary: photoLibrary, hashing: hashing, hashStore: hashStore)
@@ -50,16 +41,11 @@ final class PhotosViewModelTests: XCTestCase {
         let libraryAsset = makeLibraryAsset()
         let identifier = libraryAsset.asset.localIdentifier
         photoLibrary.libraryAssets = [libraryAsset]
-        hashStore.records[identifier] = HashRecord(
-            localIdentifier: identifier,
+        hashStore.records[identifier] = makeHashRecord(
+            identifier: identifier,
             phash: 0x1111,
             hashVersion: HashingPipeline.version - 1,
-            modificationDate: libraryAsset.asset.modificationDate,
-            creationDate: libraryAsset.asset.creationDate,
-            state: .computed,
-            failureReason: nil,
-            groupID: nil,
-            updatedAt: Date()
+            modificationDate: libraryAsset.asset.modificationDate
         )
         hashing.outcomeToReturn = .computed(0x2222)
 
@@ -98,17 +84,7 @@ final class PhotosViewModelTests: XCTestCase {
         let hashing = ImageHashingServiceMock()
         let hashStore = HashStoreMock()
 
-        hashStore.records["orphan-id"] = HashRecord(
-            localIdentifier: "orphan-id",
-            phash: 1,
-            hashVersion: HashingPipeline.version,
-            modificationDate: nil,
-            creationDate: nil,
-            state: .computed,
-            failureReason: nil,
-            groupID: nil,
-            updatedAt: Date()
-        )
+        hashStore.records["orphan-id"] = makeHashRecord(identifier: "orphan-id")
         photoLibrary.libraryAssets = []
 
         let viewModel = PhotosViewModel(photoLibrary: photoLibrary, hashing: hashing, hashStore: hashStore)

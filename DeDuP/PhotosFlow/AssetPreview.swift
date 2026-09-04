@@ -7,13 +7,16 @@
 
 import SwiftUI
 
-/// A single grid cell. Owns the `Asset` model directly (which loads its own thumbnail via its
-/// injected `PhotoLibraryServiceProtocol`), so it only needs a delete callback from its parent.
+/// A single grid cell. Observes — never owns — the `Asset` model handed down by its parent
+/// (W-42): `@StateObject` latches onto the first instance it is given and ignores every later
+/// one, so after a re-group a reused cell would keep showing the photo from the previous
+/// layout (B-15). It only needs a delete callback on top of the model.
 struct AssetPreview: View {
-    @StateObject var assetInfo: Asset
+    @ObservedObject var assetInfo: Asset
     var onAssetDelete: () -> Void
 
     private static let previewDimension = 100.0
+    private static let thumbnailSize = CGSize(width: 200.0, height: 200.0)
 
     var body: some View {
         VStack {
@@ -36,8 +39,11 @@ struct AssetPreview: View {
             Text(assetInfo.collectionName ?? "No Album")
                 .font(.caption)
         }
-        .onAppear {
-            assetInfo.requestThumbnail(CGSize(width: 200.0, height: 200.0))
+        // Keyed on the asset's identity so a recycled cell loads the photo it now represents,
+        // and cancelled by SwiftUI when the cell scrolls away (W-42) — unlike `onAppear`, which
+        // fired a fresh, uncancellable request every time the cell came back into view.
+        .task(id: assetInfo.id) {
+            await assetInfo.loadThumbnail(size: Self.thumbnailSize)
         }
     }
 }

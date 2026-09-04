@@ -9,9 +9,11 @@ import SwiftUI
 
 @main
 struct DeDuPApp: App {
+    @StateObject private var viewModel = PhotosViewModel()
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(viewModel: viewModel)
         }
     }
 }

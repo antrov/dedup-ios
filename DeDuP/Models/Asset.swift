@@ -41,11 +41,16 @@ class Asset: Equatable, ObservableObject, Identifiable {
         self.photoLibrary = photoLibrary
     }
 
-    func requestThumbnail(_ size: CGSize) {
-        Task {
-            let image = await photoLibrary.requestThumbnail(for: libraryAsset, size: size)
-            await MainActor.run { self.thumbnail = image }
-        }
+    /// Loads the thumbnail at most once, on the main actor (W-42). The owning cell drives this
+    /// from its own task, so scrolling the cell away cancels the request instead of leaving it
+    /// queued in PhotoKit, and a cell that scrolls back into view finds the image already here
+    /// rather than asking for it again.
+    @MainActor
+    func loadThumbnail(size: CGSize) async {
+        guard thumbnail == nil else { return }
+        let image = await photoLibrary.requestThumbnail(for: libraryAsset, size: size)
+        guard !Task.isCancelled else { return }
+        thumbnail = image
     }
 
     static func == (lhs: Asset, rhs: Asset) -> Bool {

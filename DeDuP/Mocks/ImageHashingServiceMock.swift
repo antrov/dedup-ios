@@ -23,6 +23,8 @@
         }
 
         var outcomeToReturn: HashOutcome = .computed(0)
+        /// Makes hashing take measurable time, so a test can act while a scan is still running.
+        var delay: Duration?
 
         private let callLog = CallLog()
 
@@ -36,6 +38,9 @@
 
         func hash(for _: LibraryAsset, allowsNetworkAccess: Bool) async -> HashOutcome {
             await callLog.record(allowsNetworkAccess: allowsNetworkAccess)
+            if let delay {
+                try? await Task.sleep(for: delay)
+            }
             return outcomeToReturn
         }
     }
