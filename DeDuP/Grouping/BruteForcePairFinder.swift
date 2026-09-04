@@ -15,7 +15,7 @@ import Foundation
 /// contiguous split would leave whichever thread gets the smallest indices with much more work
 /// than the rest, while striding spreads it evenly.
 struct BruteForcePairFinder: PairFinder {
-    func findPairs(hashes: [UInt64], threshold: Int) -> [HashPair] {
+    func findPairs(hashes: [UInt64], threshold: Int, isCancelled: @Sendable () -> Bool) -> [HashPair] {
         let count = hashes.count
         guard count > 1, threshold >= 0 else { return [] }
 
@@ -28,7 +28,14 @@ struct BruteForcePairFinder: PairFinder {
             DispatchQueue.concurrentPerform(iterations: threadCount) { thread in
                 var found: [HashPair] = []
                 var i = thread
+                // Checked once per outer step rather than in the inner distance loop (W-32): this
+                // runs entirely inside a GCD worker, with no Task of its own to read
+                // `Task.isCancelled` from, so `isCancelled` is however `GroupingEngine` bridged
+                // its own Task's cancellation in — a lock read on every outer step is cheap next
+                // to the O(count - i) inner loop it guards, and checking it is still frequent
+                // enough that a cancelled search stops promptly instead of running to completion.
                 while i < count {
+                    if isCancelled() { break }
                     let hashAtI = hashes[i]
                     for j in (i + 1) ..< count where PHash.distance(hashAtI, hashes[j]) <= threshold {
                         found.append(HashPair(i: i, j: j))

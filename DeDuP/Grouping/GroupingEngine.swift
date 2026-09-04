@@ -27,6 +27,29 @@ struct GroupingEngine: Sendable {
         let diameter: Int
     }
 
+    /// Bridges structured-concurrency cancellation into `PairFinder.findPairs`'s synchronous,
+    /// `DispatchQueue.concurrentPerform`-parallelized search (W-32). Those worker closures run on
+    /// GCD's thread pool with no Swift `Task` of their own, so they can't read `Task.isCancelled`
+    /// directly; `withTaskCancellationHandler`'s `onCancel` is what actually observes
+    /// cancellation — from whichever thread requested it — and flips this flag exactly once,
+    /// which the workers can then poll safely from any thread.
+    private final class CancellationFlag: @unchecked Sendable {
+        private let lock = NSLock()
+        private var cancelled = false
+
+        var isCancelled: Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return cancelled
+        }
+
+        func cancel() {
+            lock.lock()
+            cancelled = true
+            lock.unlock()
+        }
+    }
+
     private let pairFinder: PairFinder
 
     init(pairFinder: PairFinder = BruteForcePairFinder()) {
@@ -38,17 +61,23 @@ struct GroupingEngine: Sendable {
     /// they're connected, directly or through a chain of intermediaries, by edges of at most
     /// `threshold` Hamming distance. Groups of one are discarded.
     ///
-    /// Cooperatively cancellable (W-32): checked before the pair search and again before
-    /// building components, the two points expensive enough on a large library to matter.
+    /// Cooperatively cancellable (W-32): checked before the pair search, periodically *during*
+    /// it via `CancellationFlag` (so a cancelled search on a large library stops promptly rather
+    /// than running to completion), and again before building components.
     func makeGroups(identifiers: [String], hashes: [UInt64], threshold: Int) async throws -> [Group] {
         precondition(identifiers.count == hashes.count, "identifiers and hashes must be parallel arrays")
         guard identifiers.count > 1 else { return [] }
 
         try Task.checkCancellation()
-        let pairs = pairFinder.findPairs(hashes: hashes, threshold: threshold)
+        let cancellationFlag = CancellationFlag()
+        let pairs = await withTaskCancellationHandler {
+            pairFinder.findPairs(hashes: hashes, threshold: threshold, isCancelled: { cancellationFlag.isCancelled })
+        } onCancel: {
+            cancellationFlag.cancel()
+        }
+        try Task.checkCancellation()
         guard !pairs.isEmpty else { return [] }
 
-        try Task.checkCancellation()
         var disjointSet = DisjointSet(count: identifiers.count)
         for pair in pairs {
             disjointSet.union(pair.i, pair.j)

@@ -152,15 +152,35 @@ final class PhotosViewModel: ObservableObject {
         let threshold = distanceThreshold
         let assetsByID = Dictionary(uniqueKeysWithValues: filteredAssets.map { ($0.id, $0) })
 
-        let domainGroups = (try? await Task.detached(priority: .userInitiated) { [groupingEngine] in
-            try await groupingEngine.makeGroups(identifiers: identifiers, hashes: hashes, threshold: threshold)
-        }.value) ?? []
+        let domainGroups: [GroupingEngine.Group]
+        do {
+            domainGroups = try await Task.detached(priority: .userInitiated) { [groupingEngine] in
+                try await groupingEngine.makeGroups(identifiers: identifiers, hashes: hashes, threshold: threshold)
+            }.value
+        } catch {
+            // Cancelled (a fresher regroup superseded this one) or failed: leave the last known
+            // groups and their persisted group_id assignments untouched. Turning "the engine
+            // didn't finish" into an empty result here would write `nil` group_id for every
+            // considered identifier below, wiping out the last valid assignment on every
+            // cancelled regroup instead of just skipping it.
+            return
+        }
 
         try? await hashStore.saveGroupAssignments(Self.groupAssignments(for: identifiers, in: domainGroups))
 
-        groups = domainGroups
+        let newGroups = domainGroups
             .map { AssetsGroup(assets: $0.memberIdentifiers.compactMap { assetsByID[$0] }) }
             .sorted()
+        await setGroups(newGroups)
+    }
+
+    /// Applies the finished grouping result on the main actor (W-34): `rebuildGroups` resumes
+    /// from `Task.detached` on an arbitrary background executor, so mutating `groups` — and
+    /// constructing the `AssetsGroup`/`Asset` UI models it holds — must be hopped here rather
+    /// than done inline right after the `await`.
+    @MainActor
+    private func setGroups(_ newGroups: [AssetsGroup]) {
+        groups = newGroups
         applySorting()
     }
 
