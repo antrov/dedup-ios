@@ -46,9 +46,9 @@ enum PHash {
     static func diameter(of hashes: [UInt64]) -> Int {
         guard hashes.count > 1 else { return 0 }
         var result = 0
-        for i in hashes.indices {
-            for j in (i + 1) ..< hashes.count {
-                result = max(result, distance(hashes[i], hashes[j]))
+        for lowerIndex in hashes.indices {
+            for upperIndex in (lowerIndex + 1) ..< hashes.count {
+                result = max(result, distance(hashes[lowerIndex], hashes[upperIndex]))
             }
         }
         return result

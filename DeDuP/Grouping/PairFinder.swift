@@ -5,11 +5,11 @@
 
 import Foundation
 
-/// A pair of indices into a hash array, always ordered `i < j` so a pair, its reverse, and a
-/// self-pair are never counted as different results.
+/// A pair of indices into a hash array, always ordered `lowerIndex < upperIndex` so a pair, its
+/// reverse, and a self-pair are never counted as different results.
 struct HashPair: Hashable, Sendable {
-    let i: Int
-    let j: Int
+    let lowerIndex: Int
+    let upperIndex: Int
 }
 
 /// Finds every pair of hashes within `threshold` Hamming distance of each other (W-26).

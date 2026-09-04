@@ -80,7 +80,7 @@ struct GroupingEngine: Sendable {
 
         var disjointSet = DisjointSet(count: identifiers.count)
         for pair in pairs {
-            disjointSet.union(pair.i, pair.j)
+            disjointSet.union(pair.lowerIndex, pair.upperIndex)
         }
 
         var membersByRoot: [Int: [Int]] = [:]
