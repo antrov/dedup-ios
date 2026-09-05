@@ -214,6 +214,39 @@ final class PhotosViewModelStateTests: XCTestCase {
         return false
     }
 
+    // MARK: - W-19: the iCloud retry is a single pass, however often it is asked for
+
+    /// Two taps on "Fetch" in a row: the second must join the pass already running instead of
+    /// starting a second one that hashes the same photos again and adds a second `Asset` for
+    /// each of them — which grouping, keyed by identifier, cannot represent.
+    func testConcurrentCloudRetriesHashEachPhotoOnce() async {
+        let photoLibrary = PhotoLibraryServiceMock()
+        photoLibrary.libraryAssets = [makeLibraryAsset(), makeLibraryAsset()]
+        let hashing = ImageHashingServiceMock()
+        hashing.outcomeToReturn = .cloudOnly
+
+        let viewModel = makeViewModel(photoLibrary: photoLibrary, hashing: hashing)
+        await viewModel.fetch()
+        XCTAssertEqual(viewModel.processingCounts.cloudOnly, 2)
+
+        let callsBeforeRetry = await hashing.hashCallCount
+        hashing.outcomeToReturn = .computed(0x4242)
+        hashing.delay = .milliseconds(300)
+
+        async let firstTap: Void = viewModel.retryCloudOnlyAssets()
+        async let secondTap: Void = viewModel.retryCloudOnlyAssets()
+        _ = await(firstTap, secondTap)
+
+        let callsAfterRetry = await hashing.hashCallCount
+        XCTAssertEqual(callsAfterRetry - callsBeforeRetry, 2, "two photos should be hashed once each, not once per tap")
+        XCTAssertEqual(viewModel.processingCounts.cloudOnly, 0)
+        XCTAssertEqual(viewModel.processingCounts.computed, 2)
+
+        // Grouping builds a dictionary keyed by identifier, so a duplicated asset traps here.
+        await viewModel.rebuildGroups()
+        XCTAssertEqual(viewModel.state.groups.first?.assets.count, 2, "both photos belong to one group, once each")
+    }
+
     /// W-31 / B-14: the sort direction only reorders the published result, it doesn't re-group.
     func testSortingTogglesOrderWithoutRegrouping() async {
         let photoLibrary = PhotoLibraryServiceMock()

@@ -33,6 +33,22 @@ struct ProcessingCounts: Equatable {
     }
 }
 
+/// In an extension so the memberwise initializer survives for previews and tests.
+extension ProcessingCounts {
+    /// Tallies the cache rows of the photos the last scan saw.
+    init(libraryTotal: Int, records: [HashRecord]) {
+        self.init(libraryTotal: libraryTotal)
+        for record in records {
+            switch record.state {
+            case .computed: computed += 1
+            case .cloudOnly: cloudOnly += 1
+            case .failed: failed += 1
+            case .unsupportedType: unsupportedType += 1
+            }
+        }
+    }
+}
+
 /// The whole state of the photos screen as a single value (W-38), replacing the loose
 /// `progress` / `scanPhase` / `assetsGroups` fields `PhotosViewModel` used to publish. Those
 /// couldn't express the difference between "still scanning" and "finished and found nothing" —
@@ -50,31 +66,24 @@ enum PhotosScreenState: Equatable {
     /// position, for as long as a new result takes to arrive (B-14).
     case working(phase: Phase, groups: [AssetsGroup])
     case ready(groups: [AssetsGroup])
-    case failed(message: String)
+    /// A failed pass carries the groups for the same reason `working` does: the last result is
+    /// still a valid answer for the hashes in memory, and hiding it behind a full-screen error
+    /// would cost the user a usable list over a step that may well succeed on the next attempt.
+    case failed(message: String, groups: [AssetsGroup])
 
     /// The piece of work being done, in the order the pipeline performs them.
     enum Phase: Equatable {
         case scanningLibrary(PhaseProgress)
         case hashingImages(PhaseProgress)
         case grouping
-
-        /// `nil` for work that has no countable unit to report progress against.
-        var progress: PhaseProgress? {
-            switch self {
-            case let .scanningLibrary(progress), let .hashingImages(progress):
-                return progress
-            case .grouping:
-                return nil
-            }
-        }
     }
 
-    /// Groups to display: the finished ones, or the ones currently being replaced.
+    /// Groups to display: the finished ones, or the ones a pass in flight is replacing.
     var groups: [AssetsGroup] {
         switch self {
-        case let .working(_, groups), let .ready(groups):
+        case let .working(_, groups), let .ready(groups), let .failed(_, groups):
             return groups
-        case .idle, .requestingAuthorization, .authorizationDenied, .failed:
+        case .idle, .requestingAuthorization, .authorizationDenied:
             return []
         }
     }

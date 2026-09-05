@@ -85,8 +85,11 @@ struct FiltersView: View {
                     Text("\(counts.cloudOnly)")
                     if counts.cloudOnly > 0 {
                         // The one place a scan is allowed to download from iCloud, and only
-                        // because the user asked for it here (W-19).
+                        // because the user asked for it here (W-19). Off while anything is
+                        // running: the count only refreshes once the download finishes, so
+                        // otherwise the button keeps inviting taps for work already underway.
                         Button("Fetch", action: onFetchCloudOnlyRequested)
+                            .disabled(status != nil)
                     }
                 }
             }

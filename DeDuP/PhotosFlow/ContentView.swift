@@ -151,7 +151,7 @@ struct ContentView: View {
                 } description: {
                     Text("Nothing in your library is within \(viewModel.distanceThreshold) bits of anything else.")
                 }
-            case let .failed(message):
+            case let .failed(message, _):
                 ContentUnavailableView {
                     Label("Scan failed", systemImage: "exclamationmark.triangle")
                 } description: {

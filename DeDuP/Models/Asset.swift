@@ -57,3 +57,23 @@ class Asset: Equatable, ObservableObject, Identifiable {
         lhs.id == rhs.id
     }
 }
+
+extension Asset {
+    /// The UI models for one pass of the hashing pipeline. Only records that actually produced a
+    /// hash become assets: cloud-only, unsupported and failed ones stay in the cache and are
+    /// reported as counts (W-22, W-43) instead of silently reaching grouping as if they had been
+    /// compared. `libraryAssets` is expected to hold one entry per photo, as `Set<LibraryAsset>`
+    /// guarantees.
+    static func make(
+        from records: [HashRecord],
+        for libraryAssets: [LibraryAsset],
+        photoLibrary: PhotoLibraryServiceProtocol
+    ) -> [Asset] {
+        let assetsByID = Dictionary(uniqueKeysWithValues: libraryAssets.map { ($0.asset.localIdentifier, $0) })
+        return records.compactMap { record in
+            guard record.state == .computed, let phash = record.phash,
+                  let libraryAsset = assetsByID[record.localIdentifier] else { return nil }
+            return Asset(libraryAsset: libraryAsset, pHash: phash, photoLibrary: photoLibrary)
+        }
+    }
+}

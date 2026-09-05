@@ -76,6 +76,7 @@ final class PhotosViewModel: ObservableObject {
     /// Canonical, ascending order (W-31); `sorting` only decides which way it's shown.
     private var groups = [AssetsGroup]()
     private var scanTask: Task<Void, Never>?
+    private var retryTask: Task<Void, Never>?
     private var regroupTask: Task<Void, Never>?
 
     /// Real services by default; pass fakes conforming to the same protocols for previews/tests.
@@ -114,23 +115,20 @@ final class PhotosViewModel: ObservableObject {
     /// iCloud (W-19) — the only place a hashing request is allowed to hit the network (B-06). A
     /// regular scan never retries these on its own, since a cloud-only cache entry is otherwise
     /// still valid per W-11 and would just be skipped again.
+    ///
+    /// Single-flight like `fetch()` (W-37): a download can take a while and nothing stops the
+    /// user from tapping again, so a second call joins the pass already running instead of
+    /// starting one that re-downloads the same photos and adds a second `Asset` for each of them.
     func retryCloudOnlyAssets() async {
-        let cached = (try? await hashStore.loadAll()) ?? []
-        let cloudOnlyIDs = Set(cached.filter { $0.state == .cloudOnly }.map(\.localIdentifier))
-        let targets = libraryAssets.filter { cloudOnlyIDs.contains($0.asset.localIdentifier) }
-        guard !targets.isEmpty else { return }
-
-        enterPhase(.hashingImages(PhaseProgress(completed: 0, total: targets.count)))
-        let orderedTargets = Array(targets)
-        let freshRecords = await hashingPipeline.recomputeRecords(
-            for: orderedTargets,
-            allowsNetworkAccess: true,
-            onProgress: hashingProgressHandler()
-        )
-        assets.append(contentsOf: Self.makeAssets(from: freshRecords, for: orderedTargets, photoLibrary: photoLibrary))
-        await refreshProcessingCounts()
-
-        await rebuildGroups()
+        let task = retryTask ?? makeRetryTask()
+        await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
+        if retryTask == task {
+            retryTask = nil
+        }
     }
 
     /// Rebuilds `groups` from the hashes already in memory via `GroupingEngine` (W-26…W-36): no
@@ -143,7 +141,11 @@ final class PhotosViewModel: ObservableObject {
         let identifiers = filteredAssets.map(\.id)
         let hashes = filteredAssets.map(\.pHash)
         let threshold = distanceThreshold
-        let assetsByID = Dictionary(uniqueKeysWithValues: filteredAssets.map { ($0.id, $0) })
+        // `uniqueKeysWithValues` would trap on a repeated identifier, taking the whole app down
+        // for what is at worst a photo shown twice. `assets` is written by several paths — scan,
+        // iCloud retry, deletion — and one of them slipping a duplicate through shouldn't be
+        // fatal, so the first entry wins and grouping carries on.
+        let assetsByID = Dictionary(filteredAssets.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
 
         enterPhase(.grouping)
 
@@ -157,13 +159,13 @@ final class PhotosViewModel: ObservableObject {
             // identifier below, wiping out the last valid assignment on every cancelled regroup.
             return
         } catch {
-            state = .failed(message: error.localizedDescription)
+            state = .failed(message: error.localizedDescription, groups: state.groups)
             return
         }
 
         // The assignment is a cache (W-14): failing to write it costs the "show the last known
         // result on launch" shortcut, never correctness.
-        try? await hashStore.saveGroupAssignments(Self.groupAssignments(for: identifiers, in: domainGroups))
+        try? await hashStore.saveGroupAssignments(GroupingEngine.assignments(for: identifiers, in: domainGroups))
 
         groups = domainGroups
             .map { AssetsGroup(assets: $0.memberIdentifiers.compactMap { assetsByID[$0] }) }
@@ -223,12 +225,70 @@ private extension PhotosViewModel {
             allowsNetworkAccess: false,
             onProgress: hashingProgressHandler()
         )
-        assets = Self.makeAssets(from: records, for: orderedAssets, photoLibrary: photoLibrary)
+        assets = Asset.make(from: records, for: orderedAssets, photoLibrary: photoLibrary)
         try? await hashStore.deleteRecords(notIn: Set(fetchedAssets.map(\.asset.localIdentifier)))
         await refreshProcessingCounts()
         guard !Task.isCancelled else { return }
 
         await rebuildGroups()
+    }
+
+    func makeRetryTask() -> Task<Void, Never> {
+        let task = Task { [weak self] in
+            guard let self else { return }
+            // A scan assigns `assets` wholesale, this pass adds to it: running both at once would
+            // leave whichever finished last deciding what the list contains. The scan also
+            // reports its own phase, which this one would otherwise talk over.
+            if let scanTask {
+                await scanTask.value
+            }
+            guard !Task.isCancelled else { return }
+            await runCloudOnlyRetry()
+        }
+        retryTask = task
+        return task
+    }
+
+    /// One pass over the cloud-only leftovers: download and hash them with network access
+    /// allowed, then add them to what is already grouped (W-19).
+    func runCloudOnlyRetry() async {
+        let cached = (try? await hashStore.loadAll()) ?? []
+        let cloudOnlyIDs = Set(cached.filter { $0.state == .cloudOnly }.map(\.localIdentifier))
+        let targets = libraryAssets.filter { cloudOnlyIDs.contains($0.asset.localIdentifier) }
+        guard !targets.isEmpty else { return }
+
+        enterPhase(.hashingImages(PhaseProgress(completed: 0, total: targets.count)))
+        let orderedTargets = Array(targets)
+        let freshRecords = await hashingPipeline.recomputeRecords(
+            for: orderedTargets,
+            allowsNetworkAccess: true,
+            onProgress: hashingProgressHandler()
+        )
+        merge(assets: Asset.make(from: freshRecords, for: orderedTargets, photoLibrary: photoLibrary))
+        await refreshProcessingCounts()
+
+        await rebuildGroups()
+    }
+
+    /// Adds freshly hashed assets, replacing the entry for a photo that already has one rather
+    /// than appending a second. A photo is one row in `assets` by construction — grouping keys
+    /// its input by identifier — and a scan started while this pass was downloading can already
+    /// have picked up the records it saved.
+    func merge(assets newAssets: [Asset]) {
+        guard !newAssets.isEmpty else { return }
+
+        var indexByID = [String: Int](minimumCapacity: assets.count + newAssets.count)
+        for (index, asset) in assets.enumerated() {
+            indexByID[asset.id] = index
+        }
+        for asset in newAssets {
+            if let index = indexByID[asset.id] {
+                assets[index] = asset
+            } else {
+                indexByID[asset.id] = assets.count
+                assets.append(asset)
+            }
+        }
     }
 
     /// Re-groups after a debounce, cancelling whatever re-group was already pending or running
@@ -239,14 +299,14 @@ private extension PhotosViewModel {
         regroupTask = Task { [weak self] in
             try? await Task.sleep(for: Self.regroupDebounce)
             guard !Task.isCancelled, let self else { return }
-            // A scan in flight is still filling in `assets` and reporting its own phase, so
-            // re-grouping now would publish a result for part of the library and take the
-            // progress display over from the scan. Wait for it instead — it ends with a
+            // A pass in flight — a scan or the iCloud retry — is still filling in `assets` and
+            // reporting its own phase, so re-grouping now would publish a result for part of the
+            // library and take the progress display over from it. Wait instead — both end with a
             // grouping pass anyway — and then group for whatever the threshold is by then.
-            if let scanTask {
-                await scanTask.value
-                guard !Task.isCancelled else { return }
+            for ongoing in [scanTask, retryTask].compactMap({ $0 }) {
+                await ongoing.value
             }
+            guard !Task.isCancelled else { return }
             await rebuildGroups()
         }
     }
@@ -290,7 +350,9 @@ private extension PhotosViewModel {
             state = .ready(groups: orderedGroups())
         case let .working(phase, _):
             state = .working(phase: phase, groups: orderedGroups())
-        case .idle, .requestingAuthorization, .authorizationDenied, .failed:
+        case let .failed(message, _):
+            state = .failed(message: message, groups: orderedGroups())
+        case .idle, .requestingAuthorization, .authorizationDenied:
             break
         }
     }
@@ -301,22 +363,6 @@ private extension PhotosViewModel {
 
     static func isIncluded(asset: LibraryAsset, filters: AssetsFilter) -> Bool {
         filters.contains(.iCloudIncluded) || asset.asset.sourceType != .typeCloudShared
-    }
-
-    /// Every considered identifier mapped to its new group id, or `nil` if it didn't end up in
-    /// any group (W-36) — written back in the same single batched call so an identifier dropped
-    /// from a group doesn't keep pointing at one that no longer contains it.
-    static func groupAssignments(
-        for identifiers: [String],
-        in domainGroups: [GroupingEngine.Group]
-    ) -> [String: String?] {
-        var groupIDByIdentifier: [String: String] = [:]
-        for domainGroup in domainGroups {
-            for identifier in domainGroup.memberIdentifiers {
-                groupIDByIdentifier[identifier] = domainGroup.id
-            }
-        }
-        return Dictionary(uniqueKeysWithValues: identifiers.map { ($0, groupIDByIdentifier[$0]) })
     }
 }
 
@@ -334,34 +380,8 @@ private extension PhotosViewModel {
         }
     }
 
-    /// Maps the pipeline's records onto the UI models, on the main actor (W-34). Only records
-    /// that actually produced a hash become assets: cloud-only, unsupported and failed ones stay
-    /// in the cache and are reported as counts (W-22, W-43) instead of silently reaching
-    /// grouping as if they had been compared.
-    static func makeAssets(
-        from records: [HashRecord],
-        for libraryAssets: [LibraryAsset],
-        photoLibrary: PhotoLibraryServiceProtocol
-    ) -> [Asset] {
-        let assetsByID = Dictionary(uniqueKeysWithValues: libraryAssets.map { ($0.asset.localIdentifier, $0) })
-        return records.compactMap { record in
-            guard record.state == .computed, let phash = record.phash,
-                  let libraryAsset = assetsByID[record.localIdentifier] else { return nil }
-            return Asset(libraryAsset: libraryAsset, pHash: phash, photoLibrary: photoLibrary)
-        }
-    }
-
     func refreshProcessingCounts() async {
-        let all = (try? await hashStore.loadAll()) ?? []
-        var counts = ProcessingCounts(libraryTotal: libraryAssets.count)
-        for record in all {
-            switch record.state {
-            case .computed: counts.computed += 1
-            case .cloudOnly: counts.cloudOnly += 1
-            case .failed: counts.failed += 1
-            case .unsupportedType: counts.unsupportedType += 1
-            }
-        }
-        processingCounts = counts
+        let records = (try? await hashStore.loadAll()) ?? []
+        processingCounts = ProcessingCounts(libraryTotal: libraryAssets.count, records: records)
     }
 }

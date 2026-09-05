@@ -25,12 +25,6 @@ protocol PhotoLibraryServiceProtocol {
     func delete(_ asset: LibraryAsset) async throws
 }
 
-extension PhotoLibraryServiceProtocol {
-    func fetchLibraryAssets() async -> Set<LibraryAsset> {
-        await fetchLibraryAssets(onProgress: { _, _ in })
-    }
-}
-
 final class PhotoLibraryService: PhotoLibraryServiceProtocol {
     /// "Images only" applied at the fetch-options level, on every path that pulls assets out of
     /// the library (W-20) — previously only the iCloud-shared-album path filtered by media type,
