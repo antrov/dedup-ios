@@ -57,8 +57,6 @@ extension ProcessingCounts {
 enum PhotosScreenState: Equatable {
     /// Nothing has started yet; the view's own task is what leaves this state (W-40).
     case idle
-    /// Waiting on the system permission prompt.
-    case requestingAuthorization
     /// Access was refused: nothing to scan, and nothing to report as an error either.
     case authorizationDenied
     /// Work in progress, carrying the groups that stay on screen while it runs — a refresh
@@ -73,6 +71,11 @@ enum PhotosScreenState: Equatable {
 
     /// The piece of work being done, in the order the pipeline performs them.
     enum Phase: Equatable {
+        /// Waiting on the system permission prompt. A phase rather than a state of its own so it
+        /// goes through `enterPhase` like every other step: a refresh of a library the user has
+        /// already granted access to passes through here, and must not blank the list out on the
+        /// way in just because the permission is being re-checked.
+        case requestingAuthorization
         case scanningLibrary(PhaseProgress)
         case hashingImages(PhaseProgress)
         case grouping
@@ -83,7 +86,7 @@ enum PhotosScreenState: Equatable {
         switch self {
         case let .working(_, groups), let .ready(groups), let .failed(_, groups):
             return groups
-        case .idle, .requestingAuthorization, .authorizationDenied:
+        case .idle, .authorizationDenied:
             return []
         }
     }
@@ -92,7 +95,7 @@ enum PhotosScreenState: Equatable {
         switch self {
         case let .working(phase, _):
             return phase
-        case .idle, .requestingAuthorization, .authorizationDenied, .ready, .failed:
+        case .idle, .authorizationDenied, .ready, .failed:
             return nil
         }
     }

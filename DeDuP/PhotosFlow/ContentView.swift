@@ -101,6 +101,8 @@ struct ContentView: View {
     /// and the empty-list placeholder can't disagree about what the app is doing (W-38).
     private var status: FiltersView.Status? {
         switch viewModel.state.phase {
+        case .requestingAuthorization:
+            return .init(label: "Requesting access to photos", detail: nil, fraction: nil)
         case let .scanningLibrary(progress):
             // Bar only, no counts: the library walk visits a photo once per album it's in, so
             // its totals measure enumeration work rather than photos.
@@ -135,7 +137,7 @@ struct ContentView: View {
             EmptyView()
         } else {
             switch viewModel.state {
-            case .idle, .requestingAuthorization:
+            case .idle:
                 ProgressView()
             case .authorizationDenied:
                 ContentUnavailableView {

@@ -58,6 +58,29 @@ class Asset: Equatable, ObservableObject, Identifiable {
     }
 }
 
+extension [Asset] {
+    /// Adds `newAssets`, replacing the entry for a photo that already has one rather than
+    /// appending a second. A photo is one element here by construction — grouping keys its input
+    /// by identifier — and the iCloud retry can produce an asset a scan running alongside it has
+    /// already picked up from the records the retry saved (W-19).
+    mutating func mergeByIdentifier(_ newAssets: [Asset]) {
+        guard !newAssets.isEmpty else { return }
+
+        var indexByID = [String: Int](minimumCapacity: count + newAssets.count)
+        for (index, asset) in enumerated() {
+            indexByID[asset.id] = index
+        }
+        for asset in newAssets {
+            if let index = indexByID[asset.id] {
+                self[index] = asset
+            } else {
+                indexByID[asset.id] = count
+                append(asset)
+            }
+        }
+    }
+}
+
 extension Asset {
     /// The UI models for one pass of the hashing pipeline. Only records that actually produced a
     /// hash become assets: cloud-only, unsupported and failed ones stay in the cache and are

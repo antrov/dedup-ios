@@ -27,6 +27,21 @@ func makeLibraryAsset(identifier: String = UUID().uuidString) -> LibraryAsset {
     LibraryAsset(asset: StubAsset(identifier: identifier), collection: nil)
 }
 
+@MainActor
+func makePhotosViewModel(
+    photoLibrary: PhotoLibraryServiceMock = PhotoLibraryServiceMock(),
+    hashing: ImageHashingServiceMock = ImageHashingServiceMock(),
+    hashStore: HashStoreMock = HashStoreMock(),
+    pairFinder: PairFinder = BruteForcePairFinder()
+) -> PhotosViewModel {
+    PhotosViewModel(
+        photoLibrary: photoLibrary,
+        hashing: hashing,
+        hashStore: hashStore,
+        groupingEngine: GroupingEngine(pairFinder: pairFinder)
+    )
+}
+
 func makeHashRecord(
     identifier: String,
     phash: UInt64? = 1,

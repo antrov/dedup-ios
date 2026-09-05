@@ -24,12 +24,6 @@ final class PhotosViewModel: ObservableObject {
         }
     }
 
-    struct AssetsFilter: OptionSet {
-        let rawValue: UInt
-
-        static let iCloudIncluded = AssetsFilter(rawValue: 1 << 0)
-    }
-
     @Published private(set) var state: PhotosScreenState = .idle
     @Published private(set) var processingCounts = ProcessingCounts()
 
@@ -43,8 +37,6 @@ final class PhotosViewModel: ObservableObject {
         }
     }
 
-    /// Applied when building the arrays handed to grouping (W-35), never inside the grouping
-    /// loop, so a filtered-out photo doesn't cost a single comparison.
     @Published var filters: AssetsFilter = [.iCloudIncluded] {
         didSet {
             guard filters != oldValue else { return }
@@ -137,7 +129,7 @@ final class PhotosViewModel: ObservableObject {
     /// the pairing and connected-component work happens off the main actor on flat
     /// identifier/hash arrays (W-34).
     func rebuildGroups() async {
-        let filteredAssets = assets.filter { Self.isIncluded(asset: $0.libraryAsset, filters: filters) }
+        let filteredAssets = assets.filter { filters.includes($0.libraryAsset) }
         let identifiers = filteredAssets.map(\.id)
         let hashes = filteredAssets.map(\.pHash)
         let threshold = distanceThreshold
@@ -196,6 +188,14 @@ final class PhotosViewModel: ObservableObject {
 
 private extension PhotosViewModel {
     func makeScanTask() -> Task<Void, Never> {
+        // A scan supersedes a pending re-group the same way a newer re-group supersedes an older
+        // one (W-39): this pass rebuilds `assets` from scratch and ends with a grouping pass of
+        // its own, so the one already in flight is grouping a snapshot that is about to be
+        // replaced. Left running, it would publish over the scan's phase, or land after the scan
+        // and put its pre-refresh result back on screen. The cancellation checks in
+        // `rebuildGroups()` are what make the cancelled pass publish and persist nothing.
+        regroupTask?.cancel()
+
         let task = Task { [weak self] in
             guard let self else { return }
             await runScan()
@@ -210,7 +210,7 @@ private extension PhotosViewModel {
     func runScan() async {
         guard !Task.isCancelled else { return }
 
-        state = .requestingAuthorization
+        enterPhase(.requestingAuthorization)
         let status = await photoLibrary.requestAuthorization()
         guard status == .authorized || status == .limited else {
             state = .authorizationDenied
@@ -242,6 +242,10 @@ private extension PhotosViewModel {
     }
 
     func makeRetryTask() -> Task<Void, Never> {
+        // Same reasoning as in `makeScanTask()`: this pass adds to `assets` and ends with its own
+        // grouping, so a re-group already in flight is working on a snapshot about to change.
+        regroupTask?.cancel()
+
         let task = Task { [weak self] in
             guard let self else { return }
             // A scan assigns `assets` wholesale, this pass adds to it: running both at once would
@@ -272,31 +276,10 @@ private extension PhotosViewModel {
             allowsNetworkAccess: true,
             onProgress: hashingProgressHandler()
         )
-        merge(assets: Asset.make(from: freshRecords, for: orderedTargets, photoLibrary: photoLibrary))
+        assets.mergeByIdentifier(Asset.make(from: freshRecords, for: orderedTargets, photoLibrary: photoLibrary))
         await refreshProcessingCounts()
 
         await rebuildGroups()
-    }
-
-    /// Adds freshly hashed assets, replacing the entry for a photo that already has one rather
-    /// than appending a second. A photo is one row in `assets` by construction — grouping keys
-    /// its input by identifier — and a scan started while this pass was downloading can already
-    /// have picked up the records it saved.
-    func merge(assets newAssets: [Asset]) {
-        guard !newAssets.isEmpty else { return }
-
-        var indexByID = [String: Int](minimumCapacity: assets.count + newAssets.count)
-        for (index, asset) in assets.enumerated() {
-            indexByID[asset.id] = index
-        }
-        for asset in newAssets {
-            if let index = indexByID[asset.id] {
-                assets[index] = asset
-            } else {
-                indexByID[asset.id] = assets.count
-                assets.append(asset)
-            }
-        }
     }
 
     /// Re-groups after a debounce, cancelling whatever re-group was already pending or running
@@ -314,8 +297,22 @@ private extension PhotosViewModel {
             for ongoing in [scanTask, retryTask].compactMap({ $0 }) {
                 await ongoing.value
             }
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, hasSomethingToGroup else { return }
             await rebuildGroups()
+        }
+    }
+
+    /// Whether a re-group can produce an answer at all. The filters sheet stays reachable when
+    /// access was refused, and grouping an empty library there would publish "no duplicates
+    /// found" over the explanation that there was never any access — an answer to a question that
+    /// was never asked. An empty *library* is a real result and still goes through (W-38), which
+    /// is why this looks at the state rather than at `assets`.
+    var hasSomethingToGroup: Bool {
+        switch state {
+        case .working, .ready, .failed:
+            return true
+        case .idle, .authorizationDenied:
+            return false
         }
     }
 
@@ -360,17 +357,13 @@ private extension PhotosViewModel {
             state = .working(phase: phase, groups: orderedGroups())
         case let .failed(message, _):
             state = .failed(message: message, groups: orderedGroups())
-        case .idle, .requestingAuthorization, .authorizationDenied:
+        case .idle, .authorizationDenied:
             break
         }
     }
 
     func orderedGroups() -> [AssetsGroup] {
         sorting == .oldestToNewest ? groups : groups.reversed()
-    }
-
-    static func isIncluded(asset: LibraryAsset, filters: AssetsFilter) -> Bool {
-        filters.contains(.iCloudIncluded) || asset.asset.sourceType != .typeCloudShared
     }
 }
 
