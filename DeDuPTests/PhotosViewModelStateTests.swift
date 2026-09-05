@@ -3,6 +3,7 @@
 //  DeDuPTests
 //
 
+import Combine
 @testable import DeDuP
 import Photos
 import XCTest
@@ -198,6 +199,49 @@ final class PhotosViewModelStateTests: XCTestCase {
 
         await scan.value
         await waitUntil({ Self.isReady(viewModel.state) }, message: "the deferred re-group should publish a result")
+    }
+
+    /// The debounce cancels the pass it supersedes, but cancellation can also arrive *after* the
+    /// engine returned, while the group assignment is being written. Such a pass holds the
+    /// previous threshold's result and nothing orders it before the fresher one, so it must
+    /// publish nothing rather than briefly — or, if the write is slow enough, lastingly — put an
+    /// obsolete grouping on screen (W-39).
+    func testRegroupCancelledWhilePersistingDoesNotPublish() async {
+        let first = makeLibraryAsset()
+        let second = makeLibraryAsset()
+        let hashStore = HashStoreMock()
+        // Six bits apart: one group at a threshold of 6, none at 5 or at the default of 4.
+        hashStore.records = [
+            first.asset.localIdentifier: makeHashRecord(identifier: first.asset.localIdentifier, phash: 0),
+            second.asset.localIdentifier: makeHashRecord(identifier: second.asset.localIdentifier, phash: 0b111111)
+        ]
+        let photoLibrary = PhotoLibraryServiceMock()
+        photoLibrary.libraryAssets = [first, second]
+
+        let viewModel = makeViewModel(photoLibrary: photoLibrary, hashStore: hashStore)
+        await viewModel.fetch()
+        XCTAssertTrue(viewModel.state.groups.isEmpty, "six bits apart is beyond the default threshold")
+
+        var readyPublishes = 0
+        let subscription = viewModel.$state.sink { state in
+            if case .ready = state {
+                readyPublishes += 1
+            }
+        }
+        defer { subscription.cancel() }
+        readyPublishes = 0
+
+        hashStore.saveGroupAssignmentsDelay = .seconds(1)
+        viewModel.distanceThreshold = 5
+        // Past the debounce and into the persistence await of the pass for 5, then supersede it.
+        try? await Task.sleep(for: .milliseconds(500))
+        viewModel.distanceThreshold = 6
+
+        await waitUntil(
+            { !viewModel.state.groups.isEmpty },
+            message: "the re-group for the threshold the finger stopped on should publish its result"
+        )
+        XCTAssertEqual(readyPublishes, 1, "a superseded pass must not publish the previous threshold's grouping")
     }
 
     private static func isHashing(_ state: PhotosScreenState) -> Bool {

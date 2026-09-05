@@ -58,10 +58,19 @@ struct AssetHashingPipeline {
             }
         }
 
+        // Progress is reported against everything the caller asked about, counting cache hits as
+        // done (W-21). `computeAndSave` only ever sees the misses, so passing its own totals
+        // straight through would move the denominator in the middle of the phase: a
+        // hundred-photo library with ninety-nine valid cache entries would go from "0 / 100" to
+        // "1 / 1", and a fully cached one would sit at "0 / 100" until grouping started.
+        let total = libraryAssets.count
+        let cacheHits = total - needsHashing.count
+        onProgress(cacheHits, total)
+
         let freshRecords = await computeAndSave(
             for: needsHashing,
             allowsNetworkAccess: allowsNetworkAccess,
-            onProgress: onProgress
+            onProgress: { completed, _ in onProgress(cacheHits + completed, total) }
         )
         for record in freshRecords {
             recordsByID[record.localIdentifier] = record

@@ -163,9 +163,17 @@ final class PhotosViewModel: ObservableObject {
             return
         }
 
+        // The engine returned, but this pass can still have been superseded — while it ran, or
+        // while the assignments below are written, which is a database round trip. A cancelled
+        // pass must publish nothing and persist nothing: it holds the result for the previous
+        // threshold, and nothing orders it before the fresher pass' result (W-39). Same reasoning
+        // as the `CancellationError` branch, for cancellation that arrives a moment later.
+        guard !Task.isCancelled else { return }
+
         // The assignment is a cache (W-14): failing to write it costs the "show the last known
         // result on launch" shortcut, never correctness.
         try? await hashStore.saveGroupAssignments(GroupingEngine.assignments(for: identifiers, in: domainGroups))
+        guard !Task.isCancelled else { return }
 
         groups = domainGroups
             .map { AssetsGroup(assets: $0.memberIdentifiers.compactMap { assetsByID[$0] }) }
