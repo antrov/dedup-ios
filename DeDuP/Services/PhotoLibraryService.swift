@@ -107,6 +107,7 @@ final class PhotoLibraryService: NSObject, PhotoLibraryServiceProtocol, PHPhotoL
     }
 
     private let imageManager = PHCachingImageManager()
+    private let passesLock = NSLock()
     private var lastFetchPasses: [(assets: PHFetchResult<PHAsset>, collection: PHAssetCollection?)] = []
     private var changesContinuation: AsyncStream<Void>.Continuation!
     lazy var libraryChanges: AsyncStream<Void> = AsyncStream { continuation in
@@ -115,9 +116,9 @@ final class PhotoLibraryService: NSObject, PhotoLibraryServiceProtocol, PHPhotoL
 
     override init() {
         super.init()
-        PHPhotoLibrary.shared().register(self)
-        // Ensure stream is initialized
+        // Ensure stream is initialized before registering observer
         _ = libraryChanges
+        PHPhotoLibrary.shared().register(self)
     }
 
     deinit {
@@ -125,7 +126,10 @@ final class PhotoLibraryService: NSObject, PhotoLibraryServiceProtocol, PHPhotoL
     }
 
     func photoLibraryDidChange(_ changeInstance: PHChange) {
-        for pass in lastFetchPasses {
+        passesLock.lock()
+        let passes = lastFetchPasses
+        passesLock.unlock()
+        for pass in passes {
             if changeInstance.changeDetails(for: pass.assets) != nil {
                 changesContinuation.yield()
                 return
@@ -152,7 +156,9 @@ final class PhotoLibraryService: NSObject, PhotoLibraryServiceProtocol, PHPhotoL
 
     func fetchLibraryAssets(onProgress: @escaping @Sendable (Int, Int) -> Void) async -> Set<LibraryAsset> {
         let passes = fetchPasses()
+        passesLock.lock()
         lastFetchPasses = passes
+        passesLock.unlock()
         // `PHFetchResult.count` is cheap, so the total is known before a single asset is
         // enumerated. It counts enumeration work, not distinct photos — an asset in an album is
         // visited by that album's pass and by the whole-library pass — which is why the UI shows

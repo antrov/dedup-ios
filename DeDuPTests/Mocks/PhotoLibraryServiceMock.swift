@@ -27,6 +27,13 @@ final class PhotoLibraryServiceMock: PhotoLibraryServiceProtocol, @unchecked Sen
         }
     }
 
+    var authorizationStatus: PHAuthorizationStatus {
+        get { authorizationStatusToReturn }
+        set { authorizationStatusToReturn = newValue }
+    }
+
+    var authorizationDelay: Duration?
+
     var assetsToReturn: Set<LibraryAsset> {
         get {
             lock.lock()
@@ -39,6 +46,15 @@ final class PhotoLibraryServiceMock: PhotoLibraryServiceProtocol, @unchecked Sen
             lock.unlock()
         }
     }
+
+    var libraryAssets: Set<LibraryAsset> {
+        get { assetsToReturn }
+        set { assetsToReturn = newValue }
+    }
+
+    var fetchCallCount = 0
+    var thumbnailRequestCount = 0
+    var deletedAssets: [LibraryAsset] = []
 
     private var _changesContinuation: AsyncStream<Void>.Continuation!
     lazy var libraryChanges: AsyncStream<Void> = AsyncStream { continuation in
@@ -54,22 +70,28 @@ final class PhotoLibraryServiceMock: PhotoLibraryServiceProtocol, @unchecked Sen
     }
 
     func requestAuthorization() async -> PHAuthorizationStatus {
-        authorizationStatusToReturn
+        if let authorizationDelay {
+            await Task.detached { try? await Task.sleep(for: authorizationDelay) }.value
+        }
+        return authorizationStatusToReturn
     }
 
     func fetchLibraryAssets(onProgress: @escaping @Sendable (Int, Int) -> Void) async -> Set<LibraryAsset> {
+        fetchCallCount += 1
         let assets = assetsToReturn
         onProgress(assets.count, assets.count)
         return assets
     }
 
     func requestThumbnail(for _: LibraryAsset, size _: CGSize) async -> UIImage? {
-        nil
+        thumbnailRequestCount += 1
+        return UIImage(named: "StockPhoto1")
     }
 
     func delete(_ asset: LibraryAsset) async throws {
         lock.lock()
         _assetsToReturn.remove(asset)
+        deletedAssets.append(asset)
         lock.unlock()
     }
 }

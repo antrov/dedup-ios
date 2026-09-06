@@ -215,6 +215,27 @@ final class PhotosViewModel: ObservableObject {
     func deleteAsset(_ asset: Asset) async {
         do {
             try await photoLibrary.delete(asset.libraryAsset)
+            // Synchronously remove the asset from the UI
+            assets.removeAll { $0.id == asset.id }
+
+            var modifiedGroupIndexes = [Int]()
+            for (index, group) in groups.enumerated() where group.assets.contains(where: { $0.id == asset.id }) {
+                modifiedGroupIndexes.append(index)
+            }
+
+            if !modifiedGroupIndexes.isEmpty {
+                for index in modifiedGroupIndexes.reversed() {
+                    var group = groups[index]
+                    var groupAssets = group.assets
+                    groupAssets.removeAll { $0.id == asset.id }
+                    if groupAssets.count > 1 {
+                        groups[index] = AssetsGroup(assets: groupAssets)
+                    } else {
+                        groups.remove(at: index)
+                    }
+                }
+                republishGroups()
+            }
         } catch {
             state = .failed(message: error.localizedDescription, groups: state.groups)
         }
@@ -225,6 +246,16 @@ final class PhotosViewModel: ObservableObject {
             guard let self else { return }
             for await _ in self.photoLibrary.libraryChanges {
                 guard !Task.isCancelled else { break }
+                // Debounce library changes
+                try? await Task.sleep(for: .milliseconds(500))
+                guard !Task.isCancelled else { break }
+
+                // Serialize with active scan/retry
+                for ongoing in [scanTask, retryTask].compactMap({ $0 }) {
+                    await ongoing.value
+                }
+                guard !Task.isCancelled else { break }
+
                 await self.handleLibraryChange()
             }
         }
@@ -233,11 +264,24 @@ final class PhotosViewModel: ObservableObject {
     private func handleLibraryChange() async {
         let newLibraryAssets = await photoLibrary.fetchLibraryAssets { _, _ in }
 
-        let oldIDs = Set(libraryAssets.map(\.asset.localIdentifier))
-        let newIDs = Set(newLibraryAssets.map(\.asset.localIdentifier))
+        let oldAssetsByID = Dictionary(uniqueKeysWithValues: libraryAssets.map { ($0.asset.localIdentifier, $0) })
+        let newAssetsByID = Dictionary(uniqueKeysWithValues: newLibraryAssets.map { ($0.asset.localIdentifier, $0) })
+
+        let oldIDs = Set(oldAssetsByID.keys)
+        let newIDs = Set(newAssetsByID.keys)
 
         let removedIDs = oldIDs.subtracting(newIDs)
         let insertedIDs = newIDs.subtracting(oldIDs)
+
+        var modifiedIDs = Set<String>()
+        for id in oldIDs.intersection(newIDs) {
+            guard let oldAsset = oldAssetsByID[id], let newAsset = newAssetsByID[id] else { continue }
+            if oldAsset.asset.modificationDate != newAsset.asset.modificationDate || oldAsset.collections != newAsset
+                .collections
+            {
+                modifiedIDs.insert(id)
+            }
+        }
 
         libraryAssets = newLibraryAssets
 
@@ -272,7 +316,8 @@ final class PhotosViewModel: ObservableObject {
                         threshold: answer.threshold
                     ) {
                         newDomainGroups.append(contentsOf: domainGroups)
-                        newConsideredIdentifiers.append(contentsOf: identifiers)
+                        // Include all remaining assets in considered identifiers to clear stale group_ids
+                        newConsideredIdentifiers.append(contentsOf: remainingAssets.map(\.id))
                     }
                 }
 
@@ -295,9 +340,15 @@ final class PhotosViewModel: ObservableObject {
             republishGroups()
         }
 
-        if !insertedIDs.isEmpty {
-            let insertedAssets = newLibraryAssets.filter { insertedIDs.contains($0.asset.localIdentifier) }
-            let orderedTargets = Array(insertedAssets)
+        if !insertedIDs.isEmpty || !modifiedIDs.isEmpty {
+            let idsToProcess = insertedIDs.union(modifiedIDs)
+            let assetsToProcess = newLibraryAssets.filter { idsToProcess.contains($0.asset.localIdentifier) }
+            let orderedTargets = Array(assetsToProcess)
+
+            if !modifiedIDs.isEmpty {
+                try? await hashStore.delete(identifiers: Array(modifiedIDs))
+                assets.removeAll { modifiedIDs.contains($0.id) }
+            }
 
             let freshRecords = await hashingPipeline.resolveRecords(
                 for: orderedTargets,
@@ -308,12 +359,16 @@ final class PhotosViewModel: ObservableObject {
             let newAssetObjects = Asset.make(from: freshRecords, for: orderedTargets, photoLibrary: photoLibrary)
             assets.append(contentsOf: newAssetObjects)
 
+            // For single-asset additions, we could do incremental grouping, but for now we'll just rebuild
+            // to keep it simple and correct. A true incremental grouping would require GroupingEngine support.
             shouldRebuild = true
         }
 
         if shouldRebuild {
             await rebuildGroups()
         }
+
+        await refreshProcessingCounts()
     }
 }
 

@@ -47,6 +47,10 @@
         func delete(_ asset: LibraryAsset) async throws {
             deletedAssets.append(asset)
         }
+
+        var libraryChanges: AsyncStream<Void> {
+            AsyncStream { _ in }
+        }
     }
 
 #endif

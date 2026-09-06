@@ -13,10 +13,14 @@ struct LibraryAsset: Hashable, CustomStringConvertible {
     let asset: PHAsset
     let collections: [PHAssetCollection]
 
+    var collectionName: String? {
+        let name = collections.compactMap { $0.localizedTitle }.joined(separator: ", ")
+        return name.isEmpty ? nil : name
+    }
+
     var description: String {
         let dateString = asset.creationDate?.formatted()
-        let namesString = collections.compactMap { $0.localizedTitle }.joined(separator: ", ")
-        return [dateString, namesString.isEmpty ? nil : namesString]
+        return [dateString, collectionName]
             .compactMap { $0 }
             .joined(separator: " - ")
     }
