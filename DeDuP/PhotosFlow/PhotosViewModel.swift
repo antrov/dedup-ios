@@ -24,6 +24,17 @@ final class PhotosViewModel: ObservableObject {
         }
     }
 
+    /// What a grouping answers: the photo set it was built from and the settings it was built
+    /// for. Grouping is the one expensive thing this screen does, and both ends of it turn on
+    /// this comparison — a pass may only publish what answers the question currently on screen,
+    /// and a re-group waiting behind a pass has nothing left to add when the answer on screen
+    /// already matches the one it was going to produce (W-39).
+    private struct Answer: Equatable {
+        let assetsGeneration: Int
+        let threshold: Int
+        let filters: AssetsFilter
+    }
+
     @Published private(set) var state: PhotosScreenState = .idle
     @Published private(set) var processingCounts = ProcessingCounts()
 
@@ -64,7 +75,17 @@ final class PhotosViewModel: ObservableObject {
     private static let regroupDebounce = Duration.milliseconds(250)
 
     private var libraryAssets = Set<LibraryAsset>()
-    private var assets = [Asset]()
+    private var assets = [Asset]() {
+        didSet { assetsGeneration += 1 }
+    }
+
+    /// Bumped by every write to `assets` — scan, iCloud retry, deletion — so a grouping can be
+    /// told apart from one built before the photo set changed under it. Counted from the property
+    /// rather than from each writer so a new writer can't forget: an extra bump costs one
+    /// re-group, a missed one leaves an answer on screen that no longer fits the library.
+    private var assetsGeneration = 0
+    /// What the grouping on screen was built from and for, or `nil` while nothing is published.
+    private var publishedAnswer: Answer?
     /// Canonical, ascending order (W-31); `sorting` only decides which way it's shown.
     private var groups = [AssetsGroup]()
     private var scanTask: Task<Void, Never>?
@@ -132,9 +153,8 @@ final class PhotosViewModel: ObservableObject {
     /// the pairing and connected-component work happens off the main actor on flat
     /// identifier/hash arrays (W-34).
     func rebuildGroups() async {
-        let threshold = distanceThreshold
-        let filters = self.filters
-        let filteredAssets = assets.filter { filters.includes($0.libraryAsset) }
+        let answer = wantedAnswer
+        let filteredAssets = assets.filter { answer.filters.includes($0.libraryAsset) }
         let identifiers = filteredAssets.map(\.id)
         let hashes = filteredAssets.map(\.pHash)
         // The engine is only given what the filter let through (W-35), but what gets recorded of
@@ -152,7 +172,11 @@ final class PhotosViewModel: ObservableObject {
 
         let domainGroups: [GroupingEngine.Group]
         do {
-            domainGroups = try await makeGroupsOffMainActor(identifiers: identifiers, hashes: hashes, threshold: threshold)
+            domainGroups = try await makeGroupsOffMainActor(
+                identifiers: identifiers,
+                hashes: hashes,
+                threshold: answer.threshold
+            )
         } catch is CancellationError {
             // A fresher re-group superseded this one, or the view went away: leave the groups and
             // their persisted group_id assignments untouched. Turning "the engine didn't finish"
@@ -164,23 +188,25 @@ final class PhotosViewModel: ObservableObject {
             return
         }
 
-        // The engine returned, but this pass can still have been superseded — while it ran, or
-        // while the assignments below are written, which is a database round trip. A cancelled
-        // pass must publish nothing and persist nothing: it holds the result for the previous
-        // threshold, and nothing orders it before the fresher pass' result (W-39). Same reasoning
-        // as the `CancellationError` branch, for cancellation that arrives a moment later.
-        guard !Task.isCancelled, isAnswerTo(threshold: threshold, filters: filters) else { return }
+        // The engine returned, but the question can have moved on since — while it ran, or while
+        // the assignments below are written, which is a database round trip. Such a pass must
+        // publish nothing and persist nothing: it holds the answer to the settings, or the photo
+        // set, of a moment ago, and nothing orders it before the fresher pass' result (W-39).
+        // Same reasoning as the `CancellationError` branch, for the cases cancellation doesn't
+        // cover — a scan that started before the slider moved was never cancelled.
+        guard !Task.isCancelled, answer == wantedAnswer else { return }
 
         // The assignment is a cache (W-14): failing to write it costs the "show the last known
         // result on launch" shortcut, never correctness.
         try? await hashStore.saveGroupAssignments(
             GroupingEngine.assignments(for: consideredIdentifiers, in: domainGroups)
         )
-        guard !Task.isCancelled, isAnswerTo(threshold: threshold, filters: filters) else { return }
+        guard !Task.isCancelled, answer == wantedAnswer else { return }
 
         groups = domainGroups
             .map { AssetsGroup(assets: $0.memberIdentifiers.compactMap { assetsByID[$0] }) }
             .sorted()
+        publishedAnswer = answer
         state = .ready(groups: orderedGroups())
     }
 
@@ -330,18 +356,20 @@ private extension PhotosViewModel {
                 await ongoing.value
             }
             guard !Task.isCancelled, hasSomethingToGroup else { return }
+            // A pass that hadn't reached its own grouping yet when the change landed grouped for
+            // these very settings and published the result, which leaves this one with the same
+            // O(n²) search to run and the same answer to publish a second time. A pass that ended
+            // without publishing — cancelled, superseded, refused, nothing to retry — leaves this
+            // as the only thing that will answer the change, so the test is what was published,
+            // not whether a pass happened to finish.
+            guard publishedAnswer != wantedAnswer else { return }
             await rebuildGroups()
         }
     }
 
-    /// Whether what a grouping pass is holding still answers the settings on screen. A scan and
-    /// the iCloud retry each end with a grouping pass of their own, taken at the threshold and
-    /// filter in force when they started, and moving the slider only supersedes *re-groups* — the
-    /// pass itself was never cancelled, so nothing else stops it from publishing the grouping for
-    /// a value the user has already left and having the re-group behind it take that back. One
-    /// drag, one answer, for the settings the finger stopped on (W-39).
-    func isAnswerTo(threshold: Int, filters: AssetsFilter) -> Bool {
-        threshold == distanceThreshold && filters == self.filters
+    /// What an answer would have to cover to be the one the screen is asking for right now.
+    private var wantedAnswer: Answer {
+        Answer(assetsGeneration: assetsGeneration, threshold: distanceThreshold, filters: filters)
     }
 
     /// Whether a re-group can produce an answer at all. The filters sheet stays reachable when

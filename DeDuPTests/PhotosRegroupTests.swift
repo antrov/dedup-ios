@@ -290,6 +290,42 @@ final class PhotosRegroupTests: XCTestCase {
         XCTAssertEqual(readyPublishes, 1, "the pass must not publish the grouping for the threshold already left")
     }
 
+    /// A threshold change during a scan's hashing is answered by the scan itself: its own
+    /// grouping pass starts after the change and reads the value the finger stopped on. The
+    /// re-group queued behind it then groups the same photos at the same threshold a second
+    /// time — the same O(n²) search, the same assignment write, and a second identical result
+    /// published over the first (W-39).
+    func testThresholdChangeDuringAScanIsAnsweredByTheScanAlone() async {
+        let photoLibrary = PhotoLibraryServiceMock()
+        photoLibrary.libraryAssets = [makeLibraryAsset(), makeLibraryAsset()]
+        let hashing = ImageHashingServiceMock()
+        hashing.outcomeToReturn = .computed(0x1234)
+        hashing.delay = .seconds(1)
+        let pairFinder = CountingPairFinder()
+
+        let viewModel = makePhotosViewModel(photoLibrary: photoLibrary, hashing: hashing, pairFinder: pairFinder)
+
+        var readyPublishes = 0
+        let subscription = viewModel.$state.sink { state in
+            if case .ready = state {
+                readyPublishes += 1
+            }
+        }
+        defer { subscription.cancel() }
+
+        let scan = Task { await viewModel.fetch() }
+        await waitUntil({ isHashing(viewModel.state) }, message: "the scan should reach its hashing phase")
+
+        viewModel.distanceThreshold = 9
+        await scan.value
+        await waitUntil({ isReady(viewModel.state) }, message: "the scan should publish a result")
+        // Long enough for a re-group queued behind the scan to wake up and group again.
+        try? await Task.sleep(for: .milliseconds(600))
+
+        XCTAssertEqual(pairFinder.callCount, 1, "the scan already grouped at the threshold on screen")
+        XCTAssertEqual(readyPublishes, 1, "the same grouping must not be published twice")
+    }
+
     /// Only the *input* to the engine is filtered (W-35); what is recorded of the outcome is not.
     /// A photo the filter excluded is a photo in no group, so leaving its row pointing at the
     /// group it was in before contradicts the grouping that was just computed — and the stored
