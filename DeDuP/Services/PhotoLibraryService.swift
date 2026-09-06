@@ -23,9 +23,11 @@ protocol PhotoLibraryServiceProtocol {
     func requestThumbnail(for asset: LibraryAsset, size: CGSize) async -> UIImage?
 
     func delete(_ asset: LibraryAsset) async throws
+
+    var libraryChanges: AsyncStream<Void> { get }
 }
 
-final class PhotoLibraryService: PhotoLibraryServiceProtocol {
+final class PhotoLibraryService: NSObject, PhotoLibraryServiceProtocol, PHPhotoLibraryChangeObserver, @unchecked Sendable {
     /// "Images only" applied at the fetch-options level, on every path that pulls assets out of
     /// the library (W-20) — previously only the iCloud-shared-album path filtered by media type,
     /// so videos from regular albums reached the hashing service and were rejected there instead
@@ -105,6 +107,31 @@ final class PhotoLibraryService: PhotoLibraryServiceProtocol {
     }
 
     private let imageManager = PHCachingImageManager()
+    private var lastFetchPasses: [(assets: PHFetchResult<PHAsset>, collection: PHAssetCollection?)] = []
+    private var changesContinuation: AsyncStream<Void>.Continuation!
+    lazy var libraryChanges: AsyncStream<Void> = AsyncStream { continuation in
+        self.changesContinuation = continuation
+    }
+
+    override init() {
+        super.init()
+        PHPhotoLibrary.shared().register(self)
+        // Ensure stream is initialized
+        _ = libraryChanges
+    }
+
+    deinit {
+        PHPhotoLibrary.shared().unregisterChangeObserver(self)
+    }
+
+    func photoLibraryDidChange(_ changeInstance: PHChange) {
+        for pass in lastFetchPasses {
+            if changeInstance.changeDetails(for: pass.assets) != nil {
+                changesContinuation.yield()
+                return
+            }
+        }
+    }
 
     func requestAuthorization() async -> PHAuthorizationStatus {
         let currentStatus = PHPhotoLibrary.authorizationStatus()
@@ -125,6 +152,7 @@ final class PhotoLibraryService: PhotoLibraryServiceProtocol {
 
     func fetchLibraryAssets(onProgress: @escaping @Sendable (Int, Int) -> Void) async -> Set<LibraryAsset> {
         let passes = fetchPasses()
+        lastFetchPasses = passes
         // `PHFetchResult.count` is cheap, so the total is known before a single asset is
         // enumerated. It counts enumeration work, not distinct photos — an asset in an album is
         // visited by that album's pass and by the whole-library pass — which is why the UI shows
@@ -146,7 +174,7 @@ final class PhotoLibraryService: PhotoLibraryServiceProtocol {
                     stop.pointee = true
                     return
                 }
-                
+
                 if let existing = assetDict[asset.localIdentifier] {
                     if let collection = pass.collection, !existing.collections.contains(collection) {
                         var collections = existing.collections
