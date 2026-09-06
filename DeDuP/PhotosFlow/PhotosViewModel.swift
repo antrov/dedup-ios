@@ -94,6 +94,7 @@ final class PhotosViewModel: ObservableObject {
     /// The most recently started scan or retry, whichever it was: the tail of the chain a new one
     /// queues behind. Kept apart from the two above, which are what a second caller joins.
     private var latestPass: Task<Void, Never>?
+    private var changesTask: Task<Void, Never>?
 
     /// Real services by default; pass fakes conforming to the same protocols for previews/tests.
     /// Deliberately starts no work: scanning is driven by the view's lifecycle (W-40), so
@@ -109,6 +110,7 @@ final class PhotosViewModel: ObservableObject {
         self.hashStore = hashStore
         self.groupingEngine = groupingEngine
         hashingPipeline = AssetHashingPipeline(hashing: hashing, hashStore: hashStore)
+        startListeningToChanges()
     }
 
     /// Runs a full scan — or joins the one already in flight — and returns only once it has
@@ -215,6 +217,102 @@ final class PhotosViewModel: ObservableObject {
             try await photoLibrary.delete(asset.libraryAsset)
         } catch {
             state = .failed(message: error.localizedDescription, groups: state.groups)
+        }
+    }
+
+    private func startListeningToChanges() {
+        changesTask = Task { [weak self] in
+            guard let self else { return }
+            for await _ in self.photoLibrary.libraryChanges {
+                guard !Task.isCancelled else { break }
+                await self.handleLibraryChange()
+            }
+        }
+    }
+
+    private func handleLibraryChange() async {
+        let newLibraryAssets = await photoLibrary.fetchLibraryAssets { _, _ in }
+
+        let oldIDs = Set(libraryAssets.map(\.asset.localIdentifier))
+        let newIDs = Set(newLibraryAssets.map(\.asset.localIdentifier))
+
+        let removedIDs = oldIDs.subtracting(newIDs)
+        let insertedIDs = newIDs.subtracting(oldIDs)
+
+        libraryAssets = newLibraryAssets
+
+        var shouldRebuild = false
+
+        if !removedIDs.isEmpty {
+            try? await hashStore.delete(identifiers: Array(removedIDs))
+
+            var modifiedGroupIndexes = [Int]()
+            for (index, group) in groups.enumerated() where group.assets.contains(where: { removedIDs.contains($0.id) }) {
+                modifiedGroupIndexes.append(index)
+            }
+
+            assets.removeAll { removedIDs.contains($0.id) }
+
+            if !modifiedGroupIndexes.isEmpty {
+                let answer = wantedAnswer
+                var newDomainGroups = [GroupingEngine.Group]()
+                var newConsideredIdentifiers = [String]()
+
+                for index in modifiedGroupIndexes {
+                    let oldGroup = groups[index]
+                    let remainingAssets = oldGroup.assets.filter { !removedIDs.contains($0.id) }
+
+                    let filtered = remainingAssets.filter { answer.filters.includes($0.libraryAsset) }
+                    let identifiers = filtered.map(\.id)
+                    let hashes = filtered.map(\.pHash)
+
+                    if let domainGroups = try? await makeGroupsOffMainActor(
+                        identifiers: identifiers,
+                        hashes: hashes,
+                        threshold: answer.threshold
+                    ) {
+                        newDomainGroups.append(contentsOf: domainGroups)
+                        newConsideredIdentifiers.append(contentsOf: identifiers)
+                    }
+                }
+
+                for index in modifiedGroupIndexes.reversed() {
+                    groups.remove(at: index)
+                }
+
+                let assetsByID = Dictionary(assets.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+                let addedGroups = newDomainGroups.map { domainGroup in
+                    AssetsGroup(assets: domainGroup.memberIdentifiers.compactMap { assetsByID[$0] })
+                }
+
+                groups.append(contentsOf: addedGroups)
+                groups.sort()
+
+                try? await hashStore.saveGroupAssignments(
+                    GroupingEngine.assignments(for: newConsideredIdentifiers, in: newDomainGroups)
+                )
+            }
+            republishGroups()
+        }
+
+        if !insertedIDs.isEmpty {
+            let insertedAssets = newLibraryAssets.filter { insertedIDs.contains($0.asset.localIdentifier) }
+            let orderedTargets = Array(insertedAssets)
+
+            let freshRecords = await hashingPipeline.resolveRecords(
+                for: orderedTargets,
+                allowsNetworkAccess: false,
+                onProgress: { _, _ in }
+            )
+
+            let newAssetObjects = Asset.make(from: freshRecords, for: orderedTargets, photoLibrary: photoLibrary)
+            assets.append(contentsOf: newAssetObjects)
+
+            shouldRebuild = true
+        }
+
+        if shouldRebuild {
+            await rebuildGroups()
         }
     }
 }
