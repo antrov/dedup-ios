@@ -44,6 +44,13 @@ func isHashing(_ state: PhotosScreenState) -> Bool {
     return false
 }
 
+func isRequestingAuthorization(_ state: PhotosScreenState) -> Bool {
+    if case .requestingAuthorization = state.phase {
+        return true
+    }
+    return false
+}
+
 func isGrouping(_ state: PhotosScreenState) -> Bool {
     if case .grouping = state.phase {
         return true

@@ -282,6 +282,11 @@ private extension PhotosViewModel {
             state = .authorizationDenied
             return
         }
+        // Asking for permission is the longest a scan sits still — the system prompt stays up
+        // until the user answers it, and the screen can be left in the meantime. Walking the
+        // whole library at that point does work nobody asked for any more, and the scan that
+        // replaces this one waits behind it (W-40).
+        guard !Task.isCancelled else { return }
 
         enterPhase(.scanningLibrary(PhaseProgress()))
         let fetchedAssets = await photoLibrary.fetchLibraryAssets { [weak self] completed, total in

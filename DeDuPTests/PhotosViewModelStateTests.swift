@@ -208,6 +208,27 @@ final class PhotosViewModelStateTests: XCTestCase {
         XCTAssertEqual(viewModel.state.groups.first?.assets.count, 3, "and on a result covering the whole library")
     }
 
+    /// Asking for permission is the longest a scan sits still: the system prompt stays up until
+    /// the user answers it, and the screen can be left while it is there. Reading the whole
+    /// library on the way out spends the walk on a screen that has gone, and the scan that
+    /// replaces this one waits behind it (W-40).
+    func testScanCalledOffAtThePermissionPromptNeverReadsTheLibrary() async {
+        let photoLibrary = PhotoLibraryServiceMock()
+        photoLibrary.libraryAssets = Set((0 ..< 3).map { _ in makeLibraryAsset() })
+        photoLibrary.authorizationDelay = .milliseconds(400)
+        let viewModel = makePhotosViewModel(photoLibrary: photoLibrary)
+
+        let visit = Task { await viewModel.fetch() }
+        await waitUntil(
+            { isRequestingAuthorization(viewModel.state) },
+            message: "the scan should be waiting on the permission prompt"
+        )
+        visit.cancel()
+        await visit.value
+
+        XCTAssertEqual(photoLibrary.fetchCallCount, 0, "a scan called off at the prompt shouldn't walk the library")
+    }
+
     /// An interrupted scan got through as many photos as its hashing window held, so the records
     /// it comes back with cover a fraction of the library. Kept, that fraction stands in for the
     /// whole library in every answer given afterwards, each one presented as complete.

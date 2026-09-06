@@ -135,7 +135,17 @@ final class PhotoLibraryService: PhotoLibraryServiceProtocol {
         var assets = Set<LibraryAsset>()
 
         for pass in passes {
-            pass.assets.enumerateObjects { asset, _, _ in
+            guard !Task.isCancelled else { break }
+            pass.assets.enumerateObjects { asset, _, stop in
+                // A single album can be most of the library, so checking only between passes
+                // would leave "the screen going away stops the work" (W-40) true at a granularity
+                // the user would never notice. The caller discards a partial result anyway; what
+                // this saves is the rest of the walk, and the wait it would put on the scan
+                // queued behind this one.
+                guard !Task.isCancelled else {
+                    stop.pointee = true
+                    return
+                }
                 assets.insert(LibraryAsset(asset: asset, collection: pass.collection))
             }
             completed += pass.assets.count
