@@ -70,6 +70,9 @@ final class PhotosViewModel: ObservableObject {
     private var scanTask: Task<Void, Never>?
     private var retryTask: Task<Void, Never>?
     private var regroupTask: Task<Void, Never>?
+    /// The most recently started scan or retry, whichever it was: the tail of the chain a new one
+    /// queues behind. Kept apart from the two above, which are what a second caller joins.
+    private var latestPass: Task<Void, Never>?
 
     /// Real services by default; pass fakes conforming to the same protocols for previews/tests.
     /// Deliberately starts no work: scanning is driven by the view's lifecycle (W-40), so
@@ -92,7 +95,7 @@ final class PhotosViewModel: ObservableObject {
     /// up for as long as the work lasts (B-13). Cancelling the caller cancels the scan itself,
     /// so the view disappearing stops the work (W-40).
     func fetch() async {
-        let task = scanTask ?? makeScanTask()
+        let task = passToJoin(scanTask) ?? makeScanTask()
         await withTaskCancellationHandler {
             await task.value
         } onCancel: {
@@ -112,7 +115,7 @@ final class PhotosViewModel: ObservableObject {
     /// user from tapping again, so a second call joins the pass already running instead of
     /// starting one that re-downloads the same photos and adds a second `Asset` for each of them.
     func retryCloudOnlyAssets() async {
-        let task = retryTask ?? makeRetryTask()
+        let task = passToJoin(retryTask) ?? makeRetryTask()
         await withTaskCancellationHandler {
             await task.value
         } onCancel: {
@@ -187,35 +190,48 @@ final class PhotosViewModel: ObservableObject {
 // MARK: - Scan and grouping orchestration (W-37…W-40)
 
 private extension PhotosViewModel {
-    /// Starts one of the two passes that own `assets` — a library scan or the iCloud retry —
-    /// queued behind the other one if that is still in flight. Serializing them is what keeps a
-    /// scan's wholesale `assets = …` from erasing what a retry merged in, and a retry's merge
-    /// from being erased by a scan working off a cache snapshot taken before the download
-    /// finished: which of the two happened to end last used to decide what the list contained.
-    /// It also keeps them from reporting phases over each other.
+    /// Starts one of the passes that own `assets` — a library scan or the iCloud retry — queued
+    /// behind whichever pass was started last. Serializing them is what keeps a scan's wholesale
+    /// `assets = …` from erasing what a retry merged in, and a retry's merge from being erased by
+    /// a scan working off a cache snapshot taken before the download finished: which of the two
+    /// happened to end last used to decide what the list contained. It also keeps them from
+    /// reporting phases over each other.
     ///
-    /// `precedingPass` is captured here, at creation time, rather than read inside the task. Two
-    /// passes asked for at almost the same moment would otherwise each find the other already
-    /// assigned by the time their bodies began, and wait for each other for good.
+    /// The pass to wait for is captured here, at creation time, rather than read inside the task.
+    /// Two passes asked for at almost the same moment would otherwise each find the other already
+    /// assigned by the time their bodies began, and wait for each other for good. Waiting on one
+    /// chain instead of on a particular kind of pass is what makes this hold for three of them —
+    /// a cancelled scan still unwinding, a retry queued behind it, and the scan that replaces it.
     ///
     /// A pending *re-group* is superseded outright instead of queued: it is grouping a snapshot
     /// this pass is about to change, and the cancellation checks in `rebuildGroups()` are what
     /// keep it from publishing or persisting anything on its way out (W-39).
-    func makePass(
-        after precedingPass: Task<Void, Never>?,
-        running pass: @escaping @MainActor (PhotosViewModel) async -> Void
-    ) -> Task<Void, Never> {
+    func makePass(running pass: @escaping @MainActor (PhotosViewModel) async -> Void) -> Task<Void, Never> {
         regroupTask?.cancel()
 
-        return Task { [weak self] in
+        let precedingPass = latestPass
+        let task = Task { [weak self] in
             await precedingPass?.value
             guard let self, !Task.isCancelled else { return }
             await pass(self)
         }
+        latestPass = task
+        return task
+    }
+
+    /// The pass a caller may join, if there is one. A cancelled pass is not one: it publishes
+    /// nothing on its way out, so joining it hands the caller back a scan that never ran. It
+    /// stays in `scanTask` until it unwinds, and unwinding takes as long as the requests already
+    /// in flight, so the lifecycle-bound caller (W-40) can easily land inside that window — a
+    /// screen that goes away and comes straight back would otherwise sit on the previous visit's
+    /// frozen progress until the user refreshed by hand.
+    func passToJoin(_ pass: Task<Void, Never>?) -> Task<Void, Never>? {
+        guard let pass, !pass.isCancelled else { return nil }
+        return pass
     }
 
     func makeScanTask() -> Task<Void, Never> {
-        let task = makePass(after: retryTask) { await $0.runScan() }
+        let task = makePass { await $0.runScan() }
         scanTask = task
         return task
     }
@@ -249,6 +265,12 @@ private extension PhotosViewModel {
             allowsNetworkAccess: false,
             onProgress: hashingProgressHandler()
         )
+        // A cancelled pass stopped part-way through the library, so `records` covers part of it.
+        // Writing that to `assets` would leave a fraction of the library standing in for the
+        // whole one, and every later answer — a threshold change, the iCloud retry — would be
+        // drawn from it and presented as complete. What was hashed stays in the cache (W-24), so
+        // the next scan resumes from there rather than starting over.
+        guard !Task.isCancelled else { return }
         assets = Asset.make(from: records, for: orderedAssets, photoLibrary: photoLibrary)
         try? await hashStore.deleteRecords(notIn: Set(fetchedAssets.map(\.asset.localIdentifier)))
         await refreshProcessingCounts()
@@ -258,7 +280,7 @@ private extension PhotosViewModel {
     }
 
     func makeRetryTask() -> Task<Void, Never> {
-        let task = makePass(after: scanTask) { await $0.runCloudOnlyRetry() }
+        let task = makePass { await $0.runCloudOnlyRetry() }
         retryTask = task
         return task
     }

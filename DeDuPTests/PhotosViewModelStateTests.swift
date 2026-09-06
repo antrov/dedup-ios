@@ -184,4 +184,52 @@ final class PhotosViewModelStateTests: XCTestCase {
         )
         XCTAssertEqual(viewModel.processingCounts.cloudOnly, 0)
     }
+
+    /// Scanning is bound to the screen's lifetime (W-40), so leaving cancels the pass — but the
+    /// pass stays where callers look for it until it has unwound, which takes as long as the
+    /// hashing requests already in flight. A screen that comes straight back lands inside that
+    /// window and joins a pass that will publish nothing, so it shows the progress the previous
+    /// visit froze at and stays there until the user thinks to refresh by hand.
+    func testScreenComingBackWhileTheCancelledScanUnwindsGetsAScanOfItsOwn() async {
+        let photoLibrary = PhotoLibraryServiceMock()
+        photoLibrary.libraryAssets = Set((0 ..< 3).map { _ in makeLibraryAsset() })
+        let hashing = ImageHashingServiceMock()
+        hashing.outcomeToReturn = .computed(0x1234)
+        hashing.delay = .milliseconds(400)
+        let viewModel = makePhotosViewModel(photoLibrary: photoLibrary, hashing: hashing)
+
+        let firstVisit = Task { await viewModel.fetch() }
+        await waitUntil({ isHashing(viewModel.state) }, message: "the first visit should get as far as hashing")
+        firstVisit.cancel()
+
+        await viewModel.fetch()
+
+        XCTAssertTrue(isReady(viewModel.state), "the screen that came back should end on a result, not on stale progress")
+        XCTAssertEqual(viewModel.state.groups.first?.assets.count, 3, "and on a result covering the whole library")
+    }
+
+    /// An interrupted scan got through as many photos as its hashing window held, so the records
+    /// it comes back with cover a fraction of the library. Kept, that fraction stands in for the
+    /// whole library in every answer given afterwards, each one presented as complete.
+    func testCancelledScanLeavesNoPartialLibraryBehind() async {
+        let photoLibrary = PhotoLibraryServiceMock()
+        // Comfortably more than the hashing window, so cancelling leaves most of them unhashed.
+        photoLibrary.libraryAssets = Set((0 ..< 40).map { _ in makeLibraryAsset() })
+        let hashing = ImageHashingServiceMock()
+        hashing.outcomeToReturn = .computed(0x1234)
+        hashing.delay = .milliseconds(300)
+        let viewModel = makePhotosViewModel(photoLibrary: photoLibrary, hashing: hashing)
+
+        let visit = Task { await viewModel.fetch() }
+        await waitUntil({ isHashing(viewModel.state) }, message: "the scan should get as far as hashing")
+        visit.cancel()
+        await visit.value
+
+        await viewModel.rebuildGroups()
+
+        XCTAssertTrue(
+            viewModel.state.groups.isEmpty,
+            "an interrupted scan should leave nothing behind to answer from, having read part of the library"
+        )
+    }
 }

@@ -39,7 +39,12 @@
         func hash(for _: LibraryAsset, allowsNetworkAccess: Bool) async -> HashOutcome {
             await callLog.record(allowsNetworkAccess: allowsNetworkAccess)
             if let delay {
-                try? await Task.sleep(for: delay)
+                // Detached, so cancelling the scan doesn't cut the wait short. The real hasher
+                // has no cancellation handling: a PhotoKit request already in flight runs to its
+                // result or its timeout (W-18), which is why a cancelled scan takes as long to
+                // unwind as its outstanding requests. A plain `Task.sleep` here would return the
+                // instant a scan was cancelled, making unwinding look free in tests alone.
+                await Task.detached { try? await Task.sleep(for: delay) }.value
             }
             return outcomeToReturn
         }
