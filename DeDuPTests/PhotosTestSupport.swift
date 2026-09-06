@@ -12,23 +12,40 @@ import XCTest
 /// needs more than one photo needs them to be distinguishable.
 final class StubAsset: PHAsset, @unchecked Sendable {
     private let identifier: String
+    private let source: PHAssetSourceType
 
-    init(identifier: String) {
+    init(identifier: String, sourceType: PHAssetSourceType) {
         self.identifier = identifier
+        source = sourceType
         super.init()
     }
 
     override var localIdentifier: String {
         identifier
     }
+
+    /// What the `iCloudIncluded` filter looks at: `.typeCloudShared` is the one it excludes.
+    override var sourceType: PHAssetSourceType {
+        source
+    }
 }
 
-func makeLibraryAsset(identifier: String = UUID().uuidString) -> LibraryAsset {
-    LibraryAsset(asset: StubAsset(identifier: identifier), collection: nil)
+func makeLibraryAsset(
+    identifier: String = UUID().uuidString,
+    sourceType: PHAssetSourceType = .typeUserLibrary
+) -> LibraryAsset {
+    LibraryAsset(asset: StubAsset(identifier: identifier, sourceType: sourceType), collection: nil)
 }
 
 func isHashing(_ state: PhotosScreenState) -> Bool {
     if case .hashingImages = state.phase {
+        return true
+    }
+    return false
+}
+
+func isGrouping(_ state: PhotosScreenState) -> Bool {
+    if case .grouping = state.phase {
         return true
     }
     return false

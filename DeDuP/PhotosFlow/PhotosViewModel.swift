@@ -132,10 +132,16 @@ final class PhotosViewModel: ObservableObject {
     /// the pairing and connected-component work happens off the main actor on flat
     /// identifier/hash arrays (W-34).
     func rebuildGroups() async {
+        let threshold = distanceThreshold
+        let filters = self.filters
         let filteredAssets = assets.filter { filters.includes($0.libraryAsset) }
         let identifiers = filteredAssets.map(\.id)
         let hashes = filteredAssets.map(\.pHash)
-        let threshold = distanceThreshold
+        // The engine is only given what the filter let through (W-35), but what gets recorded of
+        // the outcome covers every photo: one the filter excluded is one in no group, and leaving
+        // its row pointing at the group it was in before makes the stored assignment contradict
+        // the grouping that has just replaced it (W-36).
+        let consideredIdentifiers = assets.map(\.id)
         // `uniqueKeysWithValues` would trap on a repeated identifier, taking the whole app down
         // for what is at worst a photo shown twice. `assets` is written by several paths — scan,
         // iCloud retry, deletion — and one of them slipping a duplicate through shouldn't be
@@ -163,12 +169,14 @@ final class PhotosViewModel: ObservableObject {
         // pass must publish nothing and persist nothing: it holds the result for the previous
         // threshold, and nothing orders it before the fresher pass' result (W-39). Same reasoning
         // as the `CancellationError` branch, for cancellation that arrives a moment later.
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, isAnswerTo(threshold: threshold, filters: filters) else { return }
 
         // The assignment is a cache (W-14): failing to write it costs the "show the last known
         // result on launch" shortcut, never correctness.
-        try? await hashStore.saveGroupAssignments(GroupingEngine.assignments(for: identifiers, in: domainGroups))
-        guard !Task.isCancelled else { return }
+        try? await hashStore.saveGroupAssignments(
+            GroupingEngine.assignments(for: consideredIdentifiers, in: domainGroups)
+        )
+        guard !Task.isCancelled, isAnswerTo(threshold: threshold, filters: filters) else { return }
 
         groups = domainGroups
             .map { AssetsGroup(assets: $0.memberIdentifiers.compactMap { assetsByID[$0] }) }
@@ -324,6 +332,16 @@ private extension PhotosViewModel {
             guard !Task.isCancelled, hasSomethingToGroup else { return }
             await rebuildGroups()
         }
+    }
+
+    /// Whether what a grouping pass is holding still answers the settings on screen. A scan and
+    /// the iCloud retry each end with a grouping pass of their own, taken at the threshold and
+    /// filter in force when they started, and moving the slider only supersedes *re-groups* — the
+    /// pass itself was never cancelled, so nothing else stops it from publishing the grouping for
+    /// a value the user has already left and having the re-group behind it take that back. One
+    /// drag, one answer, for the settings the finger stopped on (W-39).
+    func isAnswerTo(threshold: Int, filters: AssetsFilter) -> Bool {
+        threshold == distanceThreshold && filters == self.filters
     }
 
     /// Whether a re-group can produce an answer at all. The filters sheet stays reachable when

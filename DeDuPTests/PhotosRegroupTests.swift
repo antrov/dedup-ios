@@ -246,4 +246,79 @@ final class PhotosRegroupTests: XCTestCase {
         XCTAssertEqual(pairFinder.callCount, groupingsAfterScan, "re-sorting must not re-group")
         XCTAssertEqual(viewModel.state.groups, groupsBefore.reversed())
     }
+
+    /// A scan and the iCloud retry both end with a grouping pass of their own, and that pass took
+    /// the threshold when it started. Moving the slider while it is finishing only supersedes
+    /// *re-groups*, so the pass still publishes the grouping for the value the user has already
+    /// left, and the re-group scheduled behind it undoes that a moment later — one drag, two
+    /// answers, the first of them for a setting no longer on screen (W-39).
+    func testThresholdChangedWhileAScanWasGroupingPublishesOnce() async {
+        let first = makeLibraryAsset()
+        let second = makeLibraryAsset()
+        let hashStore = HashStoreMock()
+        // Six bits apart: one group at a threshold of 6, none at 4.
+        hashStore.records = [
+            first.asset.localIdentifier: makeHashRecord(identifier: first.asset.localIdentifier, phash: 0),
+            second.asset.localIdentifier: makeHashRecord(identifier: second.asset.localIdentifier, phash: 0b111111)
+        ]
+        let photoLibrary = PhotoLibraryServiceMock()
+        photoLibrary.libraryAssets = [first, second]
+
+        let viewModel = makePhotosViewModel(photoLibrary: photoLibrary, hashStore: hashStore)
+        viewModel.distanceThreshold = 6
+
+        var readyPublishes = 0
+        let subscription = viewModel.$state.sink { state in
+            if case .ready = state {
+                readyPublishes += 1
+            }
+        }
+        defer { subscription.cancel() }
+
+        // Parks the scan's own grouping in its persistence await, holding the group it found at 6.
+        hashStore.saveGroupAssignmentsDelay = .seconds(1)
+        let scan = Task { await viewModel.fetch() }
+        await waitUntil({ isGrouping(viewModel.state) }, message: "the scan should reach its grouping pass")
+        try? await Task.sleep(for: .milliseconds(100))
+
+        viewModel.distanceThreshold = 4
+        hashStore.saveGroupAssignmentsDelay = nil
+        await scan.value
+
+        await waitUntil({ isReady(viewModel.state) }, message: "the re-group for 4 should publish")
+        XCTAssertTrue(viewModel.state.groups.isEmpty, "four bits apart is below the threshold the user landed on")
+        XCTAssertEqual(readyPublishes, 1, "the pass must not publish the grouping for the threshold already left")
+    }
+
+    /// Only the *input* to the engine is filtered (W-35); what is recorded of the outcome is not.
+    /// A photo the filter excluded is a photo in no group, so leaving its row pointing at the
+    /// group it was in before contradicts the grouping that was just computed — and the stored
+    /// assignment is what a later launch is meant to show before any scan runs (W-14, W-30).
+    func testFilteringOutSharedPhotosClearsTheirStoredGroup() async {
+        let local = makeLibraryAsset()
+        let shared = makeLibraryAsset(sourceType: .typeCloudShared)
+        let hashStore = HashStoreMock()
+        hashStore.records = [
+            local.asset.localIdentifier: makeHashRecord(identifier: local.asset.localIdentifier, phash: 0),
+            shared.asset.localIdentifier: makeHashRecord(identifier: shared.asset.localIdentifier, phash: 0)
+        ]
+        let photoLibrary = PhotoLibraryServiceMock()
+        photoLibrary.libraryAssets = [local, shared]
+
+        let viewModel = makePhotosViewModel(photoLibrary: photoLibrary, hashStore: hashStore)
+        await viewModel.fetch()
+        XCTAssertEqual(viewModel.state.groups.first?.assets.count, 2, "the two identical photos start out grouped")
+        XCTAssertNotNil(hashStore.records[shared.asset.localIdentifier]?.groupID)
+
+        viewModel.filters = []
+        await waitUntil(
+            { viewModel.state.groups.isEmpty },
+            message: "excluding the shared photo should leave the local one on its own"
+        )
+
+        XCTAssertNil(
+            hashStore.records[shared.asset.localIdentifier]?.groupID,
+            "an excluded photo should stop pointing at a group that no longer holds it"
+        )
+    }
 }

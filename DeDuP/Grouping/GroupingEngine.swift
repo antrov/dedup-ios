@@ -112,6 +112,9 @@ struct GroupingEngine: Sendable {
                 groupIDByIdentifier[identifier] = group.id
             }
         }
-        return Dictionary(uniqueKeysWithValues: identifiers.map { ($0, groupIDByIdentifier[$0]) })
+        // `uniqueKeysWithValues` would trap on a repeated identifier, which is the one thing the
+        // caller already goes out of its way to survive: a photo listed twice is worth showing
+        // twice, not worth taking the app down for. Both entries map to the same group anyway.
+        return Dictionary(identifiers.map { ($0, groupIDByIdentifier[$0]) }, uniquingKeysWith: { first, _ in first })
     }
 }

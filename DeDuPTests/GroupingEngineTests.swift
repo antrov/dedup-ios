@@ -95,6 +95,20 @@ final class GroupingEngineTests: XCTestCase {
 
     // MARK: - W-32: cancellable
 
+    /// `rebuildGroups()` deliberately survives a photo that reached it twice rather than trapping
+    /// on it, and hands the very same list here — so this has to survive it too, or the tolerance
+    /// upstream buys nothing (W-36).
+    func testAssignmentsToleratesAnIdentifierListedTwice() async throws {
+        let groups = try await engine.makeGroups(identifiers: ["a", "b"], hashes: [0, 0], threshold: 0)
+
+        let assignments = GroupingEngine.assignments(for: ["a", "a", "b", "lonely"], in: groups)
+
+        XCTAssertEqual(assignments.count, 3)
+        XCTAssertEqual(assignments["a"], groups.first?.id)
+        XCTAssertEqual(assignments["b"], groups.first?.id)
+        XCTAssertEqual(assignments["lonely"], String?.none, "an identifier in no group is recorded as being in none")
+    }
+
     func testCancellationStopsGrouping() async {
         let identifiers = ["a", "b"]
         let hashes: [UInt64] = [0, 0]
