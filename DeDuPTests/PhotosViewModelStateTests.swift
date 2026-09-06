@@ -144,4 +144,44 @@ final class PhotosViewModelStateTests: XCTestCase {
         await viewModel.rebuildGroups()
         XCTAssertEqual(viewModel.state.groups.first?.assets.count, 2, "both photos belong to one group, once each")
     }
+
+    /// The retry downloads over the network, so it is easily still running when the user
+    /// dismisses the filters sheet and pulls to refresh. The scan replaces `assets` wholesale
+    /// from a cache snapshot taken before that download finished, so run alongside the retry it
+    /// erases exactly the photos the user had just asked for.
+    func testRefreshDuringCloudRetryKeepsTheDownloadedPhotos() async {
+        let photoLibrary = PhotoLibraryServiceMock()
+        let cloudOnly = [makeLibraryAsset(), makeLibraryAsset()]
+        let neverHashed = makeLibraryAsset()
+        photoLibrary.libraryAssets = Set(cloudOnly + [neverHashed])
+        let hashing = ImageHashingServiceMock()
+        hashing.outcomeToReturn = .cloudOnly
+        let hashStore = HashStoreMock()
+
+        let viewModel = makePhotosViewModel(photoLibrary: photoLibrary, hashing: hashing, hashStore: hashStore)
+        await viewModel.fetch()
+        XCTAssertEqual(viewModel.processingCounts.cloudOnly, 3)
+
+        // Dropping one cache entry leaves the refresh hashing of its own to do, long enough that
+        // its `assets = …` lands after the retry's merge — the order that used to lose the
+        // download rather than the one that happens to survive it.
+        hashStore.records.removeValue(forKey: neverHashed.asset.localIdentifier)
+        hashing.outcomeToReturn = .computed(0x1234)
+        hashing.delay = .milliseconds(800)
+
+        let retry = Task { await viewModel.retryCloudOnlyAssets() }
+        await waitUntil({ isHashing(viewModel.state) }, message: "the retry should reach its hashing phase")
+        try? await Task.sleep(for: .milliseconds(200))
+
+        await viewModel.fetch()
+        await retry.value
+
+        XCTAssertEqual(viewModel.state.groups.count, 1)
+        XCTAssertEqual(
+            viewModel.state.groups.first?.assets.count,
+            3,
+            "a refresh must not drop the photos the retry had just downloaded"
+        )
+        XCTAssertEqual(viewModel.processingCounts.cloudOnly, 0)
+    }
 }

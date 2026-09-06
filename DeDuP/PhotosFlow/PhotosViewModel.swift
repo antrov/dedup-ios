@@ -187,19 +187,35 @@ final class PhotosViewModel: ObservableObject {
 // MARK: - Scan and grouping orchestration (W-37…W-40)
 
 private extension PhotosViewModel {
-    func makeScanTask() -> Task<Void, Never> {
-        // A scan supersedes a pending re-group the same way a newer re-group supersedes an older
-        // one (W-39): this pass rebuilds `assets` from scratch and ends with a grouping pass of
-        // its own, so the one already in flight is grouping a snapshot that is about to be
-        // replaced. Left running, it would publish over the scan's phase, or land after the scan
-        // and put its pre-refresh result back on screen. The cancellation checks in
-        // `rebuildGroups()` are what make the cancelled pass publish and persist nothing.
+    /// Starts one of the two passes that own `assets` — a library scan or the iCloud retry —
+    /// queued behind the other one if that is still in flight. Serializing them is what keeps a
+    /// scan's wholesale `assets = …` from erasing what a retry merged in, and a retry's merge
+    /// from being erased by a scan working off a cache snapshot taken before the download
+    /// finished: which of the two happened to end last used to decide what the list contained.
+    /// It also keeps them from reporting phases over each other.
+    ///
+    /// `precedingPass` is captured here, at creation time, rather than read inside the task. Two
+    /// passes asked for at almost the same moment would otherwise each find the other already
+    /// assigned by the time their bodies began, and wait for each other for good.
+    ///
+    /// A pending *re-group* is superseded outright instead of queued: it is grouping a snapshot
+    /// this pass is about to change, and the cancellation checks in `rebuildGroups()` are what
+    /// keep it from publishing or persisting anything on its way out (W-39).
+    func makePass(
+        after precedingPass: Task<Void, Never>?,
+        running pass: @escaping @MainActor (PhotosViewModel) async -> Void
+    ) -> Task<Void, Never> {
         regroupTask?.cancel()
 
-        let task = Task { [weak self] in
-            guard let self else { return }
-            await runScan()
+        return Task { [weak self] in
+            await precedingPass?.value
+            guard let self, !Task.isCancelled else { return }
+            await pass(self)
         }
+    }
+
+    func makeScanTask() -> Task<Void, Never> {
+        let task = makePass(after: retryTask) { await $0.runScan() }
         scanTask = task
         return task
     }
@@ -242,21 +258,7 @@ private extension PhotosViewModel {
     }
 
     func makeRetryTask() -> Task<Void, Never> {
-        // Same reasoning as in `makeScanTask()`: this pass adds to `assets` and ends with its own
-        // grouping, so a re-group already in flight is working on a snapshot about to change.
-        regroupTask?.cancel()
-
-        let task = Task { [weak self] in
-            guard let self else { return }
-            // A scan assigns `assets` wholesale, this pass adds to it: running both at once would
-            // leave whichever finished last deciding what the list contains. The scan also
-            // reports its own phase, which this one would otherwise talk over.
-            if let scanTask {
-                await scanTask.value
-            }
-            guard !Task.isCancelled else { return }
-            await runCloudOnlyRetry()
-        }
+        let task = makePass(after: scanTask) { await $0.runCloudOnlyRetry() }
         retryTask = task
         return task
     }

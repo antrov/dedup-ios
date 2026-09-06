@@ -28,6 +28,12 @@ line_length:
   warning: 130
   error: 160
 
+# Counts code the way `type_body_length` already does. The two rules disagreed by default, so a
+# file documenting *why* its concurrency looks the way it does was pushed over the limit by its
+# own rationale, which is the one thing here worth keeping.
+file_length:
+  ignore_comment_only_lines: true
+
 identifier_name:
   min_length:
     warning: 2

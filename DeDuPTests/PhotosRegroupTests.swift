@@ -101,17 +101,17 @@ final class PhotosRegroupTests: XCTestCase {
 
         let viewModel = makePhotosViewModel(photoLibrary: photoLibrary, hashing: hashing)
         let scan = Task { await viewModel.fetch() }
-        await waitUntil({ Self.isHashing(viewModel.state) }, message: "the scan should reach its hashing phase")
+        await waitUntil({ isHashing(viewModel.state) }, message: "the scan should reach its hashing phase")
 
         viewModel.distanceThreshold = 9
         try? await Task.sleep(for: .milliseconds(500))
         XCTAssertTrue(
-            Self.isHashing(viewModel.state),
+            isHashing(viewModel.state),
             "the scan should still own the phase while it hashes, got \(viewModel.state)"
         )
 
         await scan.value
-        await waitUntil({ Self.isReady(viewModel.state) }, message: "the deferred re-group should publish a result")
+        await waitUntil({ isReady(viewModel.state) }, message: "the deferred re-group should publish a result")
     }
 
     /// The debounce cancels the pass it supersedes, but cancellation can also arrive *after* the
@@ -245,19 +245,5 @@ final class PhotosRegroupTests: XCTestCase {
 
         XCTAssertEqual(pairFinder.callCount, groupingsAfterScan, "re-sorting must not re-group")
         XCTAssertEqual(viewModel.state.groups, groupsBefore.reversed())
-    }
-
-    private static func isHashing(_ state: PhotosScreenState) -> Bool {
-        if case .hashingImages = state.phase {
-            return true
-        }
-        return false
-    }
-
-    private static func isReady(_ state: PhotosScreenState) -> Bool {
-        if case .ready = state {
-            return true
-        }
-        return false
     }
 }

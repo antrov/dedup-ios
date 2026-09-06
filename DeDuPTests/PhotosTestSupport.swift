@@ -27,6 +27,20 @@ func makeLibraryAsset(identifier: String = UUID().uuidString) -> LibraryAsset {
     LibraryAsset(asset: StubAsset(identifier: identifier), collection: nil)
 }
 
+func isHashing(_ state: PhotosScreenState) -> Bool {
+    if case .hashingImages = state.phase {
+        return true
+    }
+    return false
+}
+
+func isReady(_ state: PhotosScreenState) -> Bool {
+    if case .ready = state {
+        return true
+    }
+    return false
+}
+
 @MainActor
 func makePhotosViewModel(
     photoLibrary: PhotoLibraryServiceMock = PhotoLibraryServiceMock(),
