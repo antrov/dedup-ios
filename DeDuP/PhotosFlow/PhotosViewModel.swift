@@ -214,10 +214,8 @@ final class PhotosViewModel: ObservableObject {
         do {
             try await photoLibrary.delete(asset.libraryAsset)
         } catch {
-            print(error)
+            state = .failed(message: error.localizedDescription, groups: state.groups)
         }
-        assets.removeAll { $0 == asset }
-        await rebuildGroups()
     }
 }
 
