@@ -193,11 +193,7 @@ final class PhotoLibraryService: PhotoLibraryServiceProtocol {
 
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             PHPhotoLibrary.shared().performChanges {
-                if let collection = asset.collection, let collectionRequest = PHAssetCollectionChangeRequest(for: collection) {
-                    collectionRequest.removeAssets(requestedAssets)
-                } else {
-                    PHAssetChangeRequest.deleteAssets(requestedAssets)
-                }
+                PHAssetChangeRequest.deleteAssets(requestedAssets)
             } completionHandler: { _, error in
                 if let error {
                     continuation.resume(throwing: error)
