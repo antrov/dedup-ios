@@ -26,14 +26,14 @@ class Asset: Equatable, ObservableObject, Identifiable {
     }
 
     var collectionName: String? {
-        libraryAsset.collection?.localizedTitle
+        libraryAsset.collectionName
     }
 
     var creationDate: Date? {
         libraryAsset.asset.creationDate
     }
 
-    lazy var meta = Meta.create(from: libraryAsset.asset, collection: libraryAsset.collection)
+    lazy var meta = Meta.create(from: libraryAsset)
 
     init(libraryAsset: LibraryAsset, pHash: UInt64, photoLibrary: PhotoLibraryServiceProtocol) {
         self.libraryAsset = libraryAsset

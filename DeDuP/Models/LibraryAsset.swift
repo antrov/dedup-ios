@@ -11,10 +11,18 @@ import Photos
 /// A PHAsset together with the album it was fetched from. Plain value type, no I/O.
 struct LibraryAsset: Hashable, CustomStringConvertible {
     let asset: PHAsset
-    let collection: PHAssetCollection?
+    let collections: [PHAssetCollection]
+
+    var collectionName: String? {
+        let name = collections.compactMap { $0.localizedTitle }.joined(separator: ", ")
+        return name.isEmpty ? nil : name
+    }
 
     var description: String {
-        [asset.creationDate?.formatted(), collection?.localizedTitle].compactMap { $0 }.joined(separator: " - ")
+        let dateString = asset.creationDate?.formatted()
+        return [dateString, collectionName]
+            .compactMap { $0 }
+            .joined(separator: " - ")
     }
 
     func hash(into hasher: inout Hasher) {

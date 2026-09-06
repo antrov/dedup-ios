@@ -23,9 +23,11 @@ protocol PhotoLibraryServiceProtocol {
     func requestThumbnail(for asset: LibraryAsset, size: CGSize) async -> UIImage?
 
     func delete(_ asset: LibraryAsset) async throws
+
+    var libraryChanges: AsyncStream<Void> { get }
 }
 
-final class PhotoLibraryService: PhotoLibraryServiceProtocol {
+final class PhotoLibraryService: NSObject, PhotoLibraryServiceProtocol, PHPhotoLibraryChangeObserver, @unchecked Sendable {
     /// "Images only" applied at the fetch-options level, on every path that pulls assets out of
     /// the library (W-20) — previously only the iCloud-shared-album path filtered by media type,
     /// so videos from regular albums reached the hashing service and were rejected there instead
@@ -105,6 +107,41 @@ final class PhotoLibraryService: PhotoLibraryServiceProtocol {
     }
 
     private let imageManager = PHCachingImageManager()
+    private let passesLock = NSLock()
+    private var lastFetchPasses: [(assets: PHFetchResult<PHAsset>, collection: PHAssetCollection?)] = []
+    private var lastCollectionFetches: [PHFetchResult<PHAssetCollection>] = []
+    private var changesContinuation: AsyncStream<Void>.Continuation!
+    lazy var libraryChanges: AsyncStream<Void> = AsyncStream { continuation in
+        self.changesContinuation = continuation
+    }
+
+    override init() {
+        super.init()
+        // Ensure stream is initialized before registering observer
+        _ = libraryChanges
+        PHPhotoLibrary.shared().register(self)
+    }
+
+    deinit {
+        PHPhotoLibrary.shared().unregisterChangeObserver(self)
+    }
+
+    func photoLibraryDidChange(_ changeInstance: PHChange) {
+        passesLock.lock()
+        let passes = lastFetchPasses
+        let collectionFetches = lastCollectionFetches
+        passesLock.unlock()
+
+        for collectionFetch in collectionFetches where changeInstance.changeDetails(for: collectionFetch) != nil {
+            changesContinuation.yield()
+            return
+        }
+
+        for pass in passes where changeInstance.changeDetails(for: pass.assets) != nil {
+            changesContinuation.yield()
+            return
+        }
+    }
 
     func requestAuthorization() async -> PHAuthorizationStatus {
         let currentStatus = PHPhotoLibrary.authorizationStatus()
@@ -124,7 +161,11 @@ final class PhotoLibraryService: PhotoLibraryServiceProtocol {
     }
 
     func fetchLibraryAssets(onProgress: @escaping @Sendable (Int, Int) -> Void) async -> Set<LibraryAsset> {
-        let passes = fetchPasses()
+        let (passes, collectionFetches) = fetchPasses()
+        passesLock.lock()
+        lastFetchPasses = passes
+        lastCollectionFetches = collectionFetches
+        passesLock.unlock()
         // `PHFetchResult.count` is cheap, so the total is known before a single asset is
         // enumerated. It counts enumeration work, not distinct photos — an asset in an album is
         // visited by that album's pass and by the whole-library pass — which is why the UI shows
@@ -132,7 +173,7 @@ final class PhotoLibraryService: PhotoLibraryServiceProtocol {
         // once per asset, keeping the number of updates bounded without throttling here (W-21).
         let total = passes.reduce(0) { $0 + $1.assets.count }
         var completed = 0
-        var assets = Set<LibraryAsset>()
+        var assetDict = [String: LibraryAsset]()
 
         for pass in passes {
             guard !Task.isCancelled else { break }
@@ -146,27 +187,42 @@ final class PhotoLibraryService: PhotoLibraryServiceProtocol {
                     stop.pointee = true
                     return
                 }
-                assets.insert(LibraryAsset(asset: asset, collection: pass.collection))
+
+                if let existing = assetDict[asset.localIdentifier] {
+                    if let collection = pass.collection, !existing.collections.contains(collection) {
+                        var collections = existing.collections
+                        collections.append(collection)
+                        assetDict[asset.localIdentifier] = LibraryAsset(asset: asset, collections: collections)
+                    }
+                } else {
+                    let collections = pass.collection.map { [$0] } ?? []
+                    assetDict[asset.localIdentifier] = LibraryAsset(asset: asset, collections: collections)
+                }
             }
             completed += pass.assets.count
             onProgress(completed, total)
         }
 
-        return assets
+        return Set(assetDict.values)
     }
 
     /// The three paths assets are pulled from, in the order that decides which album an asset
     /// present in several of them keeps: regular albums, iCloud shared albums, then everything
     /// else in the library.
-    private func fetchPasses() -> [(assets: PHFetchResult<PHAsset>, collection: PHAssetCollection?)] {
+    private func fetchPasses() -> (
+        passes: [(assets: PHFetchResult<PHAsset>, collection: PHAssetCollection?)],
+        collectionFetches: [PHFetchResult<PHAssetCollection>]
+    ) {
         var passes: [(assets: PHFetchResult<PHAsset>, collection: PHAssetCollection?)] = []
+        var collectionFetches: [PHFetchResult<PHAssetCollection>] = []
 
         for subtype in [PHAssetCollectionSubtype.albumRegular, .albumCloudShared] {
-            PHAssetCollection
-                .fetchAssetCollections(with: .album, subtype: subtype, options: nil)
-                .enumerateObjects { collection, _, _ in
-                    passes.append((PHAsset.fetchAssets(in: collection, options: Self.imageOnlyOptions), collection))
-                }
+            let fetchResult = PHAssetCollection.fetchAssetCollections(with: .album, subtype: subtype, options: nil)
+            collectionFetches.append(fetchResult)
+            fetchResult.enumerateObjects { collection, _, _ in
+                let assets = PHAsset.fetchAssets(in: collection, options: Self.imageOnlyOptions)
+                passes.append((assets, collection))
+            }
         }
 
         let fetchOptions = PHFetchOptions()
@@ -174,7 +230,7 @@ final class PhotoLibraryService: PhotoLibraryServiceProtocol {
         fetchOptions.predicate = Self.imageOnlyOptions.predicate
         passes.append((PHAsset.fetchAssets(with: .image, options: fetchOptions), nil))
 
-        return passes
+        return (passes, collectionFetches)
     }
 
     func requestThumbnail(for asset: LibraryAsset, size: CGSize) async -> UIImage? {
@@ -193,11 +249,7 @@ final class PhotoLibraryService: PhotoLibraryServiceProtocol {
 
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             PHPhotoLibrary.shared().performChanges {
-                if let collection = asset.collection, let collectionRequest = PHAssetCollectionChangeRequest(for: collection) {
-                    collectionRequest.removeAssets(requestedAssets)
-                } else {
-                    PHAssetChangeRequest.deleteAssets(requestedAssets)
-                }
+                PHAssetChangeRequest.deleteAssets(requestedAssets)
             } completionHandler: { _, error in
                 if let error {
                     continuation.resume(throwing: error)

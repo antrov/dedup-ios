@@ -54,18 +54,21 @@ struct Meta {
     let album: Field<AlbumType>
     let hasAdjustments: Field<Bool>
 
-    static func create(from asset: PHAsset, collection: PHAssetCollection?) -> Meta {
-        let collectionName = collection?.localizedTitle ?? "Unknown"
-        let albumType = AlbumType.create(sourceType: asset.sourceType, name: collectionName) ?? .userLibrary(collectionName)
+    static func create(from libraryAsset: LibraryAsset) -> Meta {
+        let nameToUse = libraryAsset.collectionName ?? "Unknown"
+        let albumType = AlbumType.create(sourceType: libraryAsset.asset.sourceType, name: nameToUse) ?? .userLibrary(nameToUse)
         return Meta(
-            identifier: asset.localIdentifier,
-            dimensions: Field(value: "\(asset.pixelWidth) x \(asset.pixelHeight)", difference: .notCompared),
-            creationDate: Field(value: asset.creationDate, difference: .notCompared),
-            modificationDate: Field(value: asset.modificationDate, difference: .notCompared),
-            typeName: Field(value: asset.mediaType.name, difference: .notCompared),
-            subtypesName: Field(value: asset.mediaSubtypes.names.joined(separator: ", "), difference: .notCompared),
+            identifier: libraryAsset.asset.localIdentifier,
+            dimensions: Field(
+                value: "\(libraryAsset.asset.pixelWidth) x \(libraryAsset.asset.pixelHeight)",
+                difference: .notCompared
+            ),
+            creationDate: Field(value: libraryAsset.asset.creationDate, difference: .notCompared),
+            modificationDate: Field(value: libraryAsset.asset.modificationDate, difference: .notCompared),
+            typeName: Field(value: libraryAsset.asset.mediaType.name, difference: .notCompared),
+            subtypesName: Field(value: libraryAsset.asset.mediaSubtypes.names.joined(separator: ", "), difference: .notCompared),
             album: Field(value: albumType, difference: .notCompared),
-            hasAdjustments: Field(value: asset.hasAdjustments, difference: .notCompared)
+            hasAdjustments: Field(value: libraryAsset.asset.hasAdjustments, difference: .notCompared)
         )
     }
 }
