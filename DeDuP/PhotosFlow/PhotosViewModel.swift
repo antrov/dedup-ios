@@ -224,16 +224,43 @@ final class PhotosViewModel: ObservableObject {
             }
 
             if !modifiedGroupIndexes.isEmpty {
-                for index in modifiedGroupIndexes.reversed() {
-                    var group = groups[index]
-                    var groupAssets = group.assets
-                    groupAssets.removeAll { $0.id == asset.id }
-                    if groupAssets.count > 1 {
-                        groups[index] = AssetsGroup(assets: groupAssets)
-                    } else {
-                        groups.remove(at: index)
+                let answer = wantedAnswer
+                var newDomainGroups = [GroupingEngine.Group]()
+                var newConsideredIdentifiers = [String]()
+
+                for index in modifiedGroupIndexes {
+                    let oldGroup = groups[index]
+                    let remainingAssets = oldGroup.assets.filter { $0.id != asset.id }
+
+                    let filtered = remainingAssets.filter { answer.filters.includes($0.libraryAsset) }
+                    let identifiers = filtered.map(\.id)
+                    let hashes = filtered.map(\.pHash)
+
+                    if let domainGroups = try? await makeGroupsOffMainActor(
+                        identifiers: identifiers,
+                        hashes: hashes,
+                        threshold: answer.threshold
+                    ) {
+                        newDomainGroups.append(contentsOf: domainGroups)
+                        newConsideredIdentifiers.append(contentsOf: remainingAssets.map(\.id))
                     }
                 }
+
+                for index in modifiedGroupIndexes.reversed() {
+                    groups.remove(at: index)
+                }
+
+                let assetsByID = Dictionary(assets.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+                let addedGroups = newDomainGroups.map { domainGroup in
+                    AssetsGroup(assets: domainGroup.memberIdentifiers.compactMap { assetsByID[$0] })
+                }
+
+                groups.append(contentsOf: addedGroups)
+                groups.sort()
+
+                try? await hashStore.saveGroupAssignments(
+                    GroupingEngine.assignments(for: newConsideredIdentifiers, in: newDomainGroups)
+                )
                 republishGroups()
             }
         } catch {

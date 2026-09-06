@@ -109,6 +109,7 @@ final class PhotoLibraryService: NSObject, PhotoLibraryServiceProtocol, PHPhotoL
     private let imageManager = PHCachingImageManager()
     private let passesLock = NSLock()
     private var lastFetchPasses: [(assets: PHFetchResult<PHAsset>, collection: PHAssetCollection?)] = []
+    private var lastCollectionFetches: [PHFetchResult<PHAssetCollection>] = []
     private var changesContinuation: AsyncStream<Void>.Continuation!
     lazy var libraryChanges: AsyncStream<Void> = AsyncStream { continuation in
         self.changesContinuation = continuation
@@ -128,12 +129,17 @@ final class PhotoLibraryService: NSObject, PhotoLibraryServiceProtocol, PHPhotoL
     func photoLibraryDidChange(_ changeInstance: PHChange) {
         passesLock.lock()
         let passes = lastFetchPasses
+        let collectionFetches = lastCollectionFetches
         passesLock.unlock()
-        for pass in passes {
-            if changeInstance.changeDetails(for: pass.assets) != nil {
-                changesContinuation.yield()
-                return
-            }
+
+        for collectionFetch in collectionFetches where changeInstance.changeDetails(for: collectionFetch) != nil {
+            changesContinuation.yield()
+            return
+        }
+
+        for pass in passes where changeInstance.changeDetails(for: pass.assets) != nil {
+            changesContinuation.yield()
+            return
         }
     }
 
@@ -155,9 +161,10 @@ final class PhotoLibraryService: NSObject, PhotoLibraryServiceProtocol, PHPhotoL
     }
 
     func fetchLibraryAssets(onProgress: @escaping @Sendable (Int, Int) -> Void) async -> Set<LibraryAsset> {
-        let passes = fetchPasses()
+        let (passes, collectionFetches) = fetchPasses()
         passesLock.lock()
         lastFetchPasses = passes
+        lastCollectionFetches = collectionFetches
         passesLock.unlock()
         // `PHFetchResult.count` is cheap, so the total is known before a single asset is
         // enumerated. It counts enumeration work, not distinct photos — an asset in an album is
@@ -202,15 +209,20 @@ final class PhotoLibraryService: NSObject, PhotoLibraryServiceProtocol, PHPhotoL
     /// The three paths assets are pulled from, in the order that decides which album an asset
     /// present in several of them keeps: regular albums, iCloud shared albums, then everything
     /// else in the library.
-    private func fetchPasses() -> [(assets: PHFetchResult<PHAsset>, collection: PHAssetCollection?)] {
+    private func fetchPasses() -> (
+        passes: [(assets: PHFetchResult<PHAsset>, collection: PHAssetCollection?)],
+        collectionFetches: [PHFetchResult<PHAssetCollection>]
+    ) {
         var passes: [(assets: PHFetchResult<PHAsset>, collection: PHAssetCollection?)] = []
+        var collectionFetches: [PHFetchResult<PHAssetCollection>] = []
 
         for subtype in [PHAssetCollectionSubtype.albumRegular, .albumCloudShared] {
-            PHAssetCollection
-                .fetchAssetCollections(with: .album, subtype: subtype, options: nil)
-                .enumerateObjects { collection, _, _ in
-                    passes.append((PHAsset.fetchAssets(in: collection, options: Self.imageOnlyOptions), collection))
-                }
+            let fetchResult = PHAssetCollection.fetchAssetCollections(with: .album, subtype: subtype, options: nil)
+            collectionFetches.append(fetchResult)
+            fetchResult.enumerateObjects { collection, _, _ in
+                let assets = PHAsset.fetchAssets(in: collection, options: Self.imageOnlyOptions)
+                passes.append((assets, collection))
+            }
         }
 
         let fetchOptions = PHFetchOptions()
@@ -218,7 +230,7 @@ final class PhotoLibraryService: NSObject, PhotoLibraryServiceProtocol, PHPhotoL
         fetchOptions.predicate = Self.imageOnlyOptions.predicate
         passes.append((PHAsset.fetchAssets(with: .image, options: fetchOptions), nil))
 
-        return passes
+        return (passes, collectionFetches)
     }
 
     func requestThumbnail(for asset: LibraryAsset, size: CGSize) async -> UIImage? {
