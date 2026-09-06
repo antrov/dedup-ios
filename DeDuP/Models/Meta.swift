@@ -54,9 +54,10 @@ struct Meta {
     let album: Field<AlbumType>
     let hasAdjustments: Field<Bool>
 
-    static func create(from asset: PHAsset, collection: PHAssetCollection?) -> Meta {
-        let collectionName = collection?.localizedTitle ?? "Unknown"
-        let albumType = AlbumType.create(sourceType: asset.sourceType, name: collectionName) ?? .userLibrary(collectionName)
+    static func create(from asset: PHAsset, collections: [PHAssetCollection]) -> Meta {
+        let collectionNames = collections.compactMap { $0.localizedTitle }.joined(separator: ", ")
+        let nameToUse = collectionNames.isEmpty ? "Unknown" : collectionNames
+        let albumType = AlbumType.create(sourceType: asset.sourceType, name: nameToUse) ?? .userLibrary(nameToUse)
         return Meta(
             identifier: asset.localIdentifier,
             dimensions: Field(value: "\(asset.pixelWidth) x \(asset.pixelHeight)", difference: .notCompared),

@@ -26,14 +26,15 @@ class Asset: Equatable, ObservableObject, Identifiable {
     }
 
     var collectionName: String? {
-        libraryAsset.collection?.localizedTitle
+        let names = libraryAsset.collections.compactMap { $0.localizedTitle }
+        return names.isEmpty ? nil : names.joined(separator: ", ")
     }
 
     var creationDate: Date? {
         libraryAsset.asset.creationDate
     }
 
-    lazy var meta = Meta.create(from: libraryAsset.asset, collection: libraryAsset.collection)
+    lazy var meta = Meta.create(from: libraryAsset.asset, collections: libraryAsset.collections)
 
     init(libraryAsset: LibraryAsset, pHash: UInt64, photoLibrary: PhotoLibraryServiceProtocol) {
         self.libraryAsset = libraryAsset

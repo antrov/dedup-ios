@@ -132,7 +132,7 @@ final class PhotoLibraryService: PhotoLibraryServiceProtocol {
         // once per asset, keeping the number of updates bounded without throttling here (W-21).
         let total = passes.reduce(0) { $0 + $1.assets.count }
         var completed = 0
-        var assets = Set<LibraryAsset>()
+        var assetDict = [String: LibraryAsset]()
 
         for pass in passes {
             guard !Task.isCancelled else { break }
@@ -146,13 +146,23 @@ final class PhotoLibraryService: PhotoLibraryServiceProtocol {
                     stop.pointee = true
                     return
                 }
-                assets.insert(LibraryAsset(asset: asset, collection: pass.collection))
+                
+                if let existing = assetDict[asset.localIdentifier] {
+                    if let collection = pass.collection, !existing.collections.contains(collection) {
+                        var collections = existing.collections
+                        collections.append(collection)
+                        assetDict[asset.localIdentifier] = LibraryAsset(asset: asset, collections: collections)
+                    }
+                } else {
+                    let collections = pass.collection.map { [$0] } ?? []
+                    assetDict[asset.localIdentifier] = LibraryAsset(asset: asset, collections: collections)
+                }
             }
             completed += pass.assets.count
             onProgress(completed, total)
         }
 
-        return assets
+        return Set(assetDict.values)
     }
 
     /// The three paths assets are pulled from, in the order that decides which album an asset

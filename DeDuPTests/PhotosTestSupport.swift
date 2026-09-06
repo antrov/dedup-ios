@@ -34,7 +34,7 @@ func makeLibraryAsset(
     identifier: String = UUID().uuidString,
     sourceType: PHAssetSourceType = .typeUserLibrary
 ) -> LibraryAsset {
-    LibraryAsset(asset: StubAsset(identifier: identifier, sourceType: sourceType), collection: nil)
+    LibraryAsset(asset: StubAsset(identifier: identifier, sourceType: sourceType), collections: [PHAssetCollection]())
 }
 
 func isHashing(_ state: PhotosScreenState) -> Bool {
