@@ -74,6 +74,35 @@ final class BoundedConcurrencyTests: XCTestCase {
         XCTAssertEqual(count, 23)
     }
 
+    /// The hashing pipeline checks for cancellation once per batch of 500 photos (W-24), so how
+    /// promptly a scan actually stops — the screen going away stops the work (W-40) — is decided
+    /// here. Feeding the window to the end of the input means a cancelled scan keeps hashing for
+    /// a screen nobody is looking at, for as long as the rest of the batch takes.
+    func testCancellationStopsFeedingNewWork() async {
+        let maxConcurrency = 2
+        let counter = CallCounter()
+        let work = Task {
+            await mapWithBoundedConcurrency(Array(0 ..< 500), maxConcurrency: maxConcurrency) { element in
+                await counter.increment()
+                try? await Task.sleep(nanoseconds: 5_000_000)
+                return element
+            }
+        }
+
+        // Cancel once the window is full, so the run is genuinely under way.
+        let deadline = Date().addingTimeInterval(5)
+        while await counter.count < maxConcurrency, Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        work.cancel()
+        let results = await work.value
+
+        let started = await counter.count
+        XCTAssertGreaterThan(started, 0, "the test should have cancelled a run that was under way")
+        XCTAssertLessThan(started, 500, "a cancelled caller shouldn't work the input out to the end")
+        XCTAssertEqual(results.count, started, "whatever had already started still comes back")
+    }
+
     func testHandlesFewerElementsThanMaxConcurrency() async {
         let results = await mapWithBoundedConcurrency([1, 2], maxConcurrency: 10) { $0 * 10 }
         XCTAssertEqual(Set(results), [10, 20])

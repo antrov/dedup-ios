@@ -25,7 +25,13 @@ func mapWithBoundedConcurrency<Element, Result: Sendable>(
         var iterator = elements.makeIterator()
 
         func addNext() {
-            guard let element = iterator.next() else { return }
+            // A cancelled caller stops feeding the window rather than working the input out to
+            // the end. The operations already in flight are left to finish — their results are
+            // worth keeping, and they are bounded by `maxConcurrency` — but nothing behind them
+            // starts. Without this, work stopped only where the caller happened to check between
+            // calls, which for the hashing pipeline is once per 500 photos: long enough that a
+            // screen the user had left kept the CPU busy for the rest of the batch.
+            guard !Task.isCancelled, let element = iterator.next() else { return }
             group.addTask { await operation(element) }
         }
 

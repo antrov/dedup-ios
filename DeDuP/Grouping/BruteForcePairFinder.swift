@@ -36,7 +36,9 @@ struct BruteForcePairFinder: PairFinder {
                 // frequent enough that a cancelled search stops promptly instead of running to
                 // completion.
                 while lowerIndex < count {
-                    if isCancelled() { break }
+                    if isCancelled() {
+                        break
+                    }
                     let hashAtLowerIndex = hashes[lowerIndex]
                     for upperIndex in (lowerIndex + 1) ..< count {
                         guard PHash.distance(hashAtLowerIndex, hashes[upperIndex]) <= threshold else { continue }

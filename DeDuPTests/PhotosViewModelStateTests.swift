@@ -1,0 +1,256 @@
+//
+//  PhotosViewModelStateTests.swift
+//  DeDuPTests
+//
+
+import Combine
+@testable import DeDuP
+import Photos
+import XCTest
+
+/// Stage 5: what the screen state says (W-38), and when scanning starts and stops (W-40, W-41).
+/// What a threshold or filter change is allowed to cost (W-39) lives in `PhotosRegroupTests`.
+@MainActor
+final class PhotosViewModelStateTests: XCTestCase {
+    // MARK: - W-38 / W-40: nothing happens until the view asks for it
+
+    func testStartsIdleAndDoesNoWorkOnInit() async {
+        let photoLibrary = PhotoLibraryServiceMock()
+        photoLibrary.libraryAssets = [makeLibraryAsset()]
+        let hashing = ImageHashingServiceMock()
+
+        let viewModel = makePhotosViewModel(photoLibrary: photoLibrary, hashing: hashing)
+
+        XCTAssertEqual(viewModel.state, .idle, "creating the view model must not start a scan (W-40)")
+        let callCount = await hashing.hashCallCount
+        XCTAssertEqual(callCount, 0)
+    }
+
+    func testRefusedAuthorizationEndsInDeniedState() async {
+        let photoLibrary = PhotoLibraryServiceMock()
+        photoLibrary.authorizationStatus = .denied
+        photoLibrary.libraryAssets = [makeLibraryAsset()]
+        let hashing = ImageHashingServiceMock()
+
+        let viewModel = makePhotosViewModel(photoLibrary: photoLibrary, hashing: hashing)
+        await viewModel.fetch()
+
+        XCTAssertEqual(viewModel.state, .authorizationDenied)
+        let callCount = await hashing.hashCallCount
+        XCTAssertEqual(callCount, 0, "a refused library must not be hashed")
+    }
+
+    /// W-41: a refresh re-checks the permission on its way in, and every state it passes through
+    /// on an already-authorized library has to keep carrying the groups. Blanking the list out
+    /// costs the scroll position and closes an open details sheet, whose binding resolves the
+    /// selected group against the published result (B-14).
+    func testRefreshKeepsTheGroupsVisibleWhileReauthorizing() async {
+        let photoLibrary = PhotoLibraryServiceMock()
+        photoLibrary.libraryAssets = [makeLibraryAsset(), makeLibraryAsset()]
+        let hashing = ImageHashingServiceMock()
+        hashing.outcomeToReturn = .computed(0x1234)
+
+        let viewModel = makePhotosViewModel(photoLibrary: photoLibrary, hashing: hashing)
+        await viewModel.fetch()
+        XCTAssertEqual(viewModel.state.groups.count, 1, "two identical hashes belong to one group")
+
+        var published: [PhotosScreenState] = []
+        let subscription = viewModel.$state.sink { published.append($0) }
+        defer { subscription.cancel() }
+        published.removeAll()
+
+        await viewModel.fetch()
+
+        XCTAssertFalse(published.isEmpty, "a refresh should publish the states it moves through")
+        XCTAssertTrue(
+            published.allSatisfy { !$0.groups.isEmpty },
+            "the list must stay on screen for the whole refresh, blanked out in \(published.map(\.phase))"
+        )
+    }
+
+    /// The distinction W-38 exists for: an empty library ends in a *finished* state, not in one
+    /// the UI can't tell apart from a scan still in progress.
+    func testEmptyLibraryEndsInReadyWithNoGroups() async {
+        let viewModel = makePhotosViewModel()
+
+        await viewModel.fetch()
+
+        XCTAssertEqual(viewModel.state, .ready(groups: []))
+    }
+
+    /// W-41 / B-13: the refresh gesture awaits `fetch()` directly, so it must not return while
+    /// the scan is still running.
+    func testFetchReturnsOnlyAfterTheScanFinished() async {
+        let photoLibrary = PhotoLibraryServiceMock()
+        photoLibrary.libraryAssets = [makeLibraryAsset(), makeLibraryAsset()]
+        let hashing = ImageHashingServiceMock()
+        hashing.outcomeToReturn = .computed(0x1234)
+
+        let viewModel = makePhotosViewModel(photoLibrary: photoLibrary, hashing: hashing)
+        await viewModel.fetch()
+
+        XCTAssertNil(viewModel.state.phase, "no phase should still be in progress once fetch() has returned")
+        guard case let .ready(groups) = viewModel.state else {
+            return XCTFail("expected a finished state, got \(viewModel.state)")
+        }
+        XCTAssertEqual(groups.count, 1, "two identical hashes belong to one group")
+        XCTAssertEqual(groups.first?.assets.count, 2)
+    }
+
+    func testProcessingCountsReportTheWholeLibrary() async {
+        let photoLibrary = PhotoLibraryServiceMock()
+        photoLibrary.libraryAssets = [makeLibraryAsset(), makeLibraryAsset(), makeLibraryAsset()]
+        let hashing = ImageHashingServiceMock()
+        hashing.outcomeToReturn = .computed(0x1234)
+
+        let viewModel = makePhotosViewModel(photoLibrary: photoLibrary, hashing: hashing)
+        await viewModel.fetch()
+
+        // W-43: three photos in the library, all hashed, nothing skipped.
+        XCTAssertEqual(viewModel.processingCounts.libraryTotal, 3)
+        XCTAssertEqual(viewModel.processingCounts.computed, 3)
+        XCTAssertEqual(viewModel.processingCounts.unprocessed, 0)
+    }
+
+    // MARK: - W-19: the iCloud retry is a single pass, however often it is asked for
+
+    /// Two taps on "Fetch" in a row: the second must join the pass already running instead of
+    /// starting a second one that hashes the same photos again and adds a second `Asset` for
+    /// each of them — which grouping, keyed by identifier, cannot represent.
+    func testConcurrentCloudRetriesHashEachPhotoOnce() async {
+        let photoLibrary = PhotoLibraryServiceMock()
+        photoLibrary.libraryAssets = [makeLibraryAsset(), makeLibraryAsset()]
+        let hashing = ImageHashingServiceMock()
+        hashing.outcomeToReturn = .cloudOnly
+
+        let viewModel = makePhotosViewModel(photoLibrary: photoLibrary, hashing: hashing)
+        await viewModel.fetch()
+        XCTAssertEqual(viewModel.processingCounts.cloudOnly, 2)
+
+        let callsBeforeRetry = await hashing.hashCallCount
+        hashing.outcomeToReturn = .computed(0x4242)
+        hashing.delay = .milliseconds(300)
+
+        async let firstTap: Void = viewModel.retryCloudOnlyAssets()
+        async let secondTap: Void = viewModel.retryCloudOnlyAssets()
+        _ = await(firstTap, secondTap)
+
+        let callsAfterRetry = await hashing.hashCallCount
+        XCTAssertEqual(callsAfterRetry - callsBeforeRetry, 2, "two photos should be hashed once each, not once per tap")
+        XCTAssertEqual(viewModel.processingCounts.cloudOnly, 0)
+        XCTAssertEqual(viewModel.processingCounts.computed, 2)
+
+        // Grouping builds a dictionary keyed by identifier, so a duplicated asset traps here.
+        await viewModel.rebuildGroups()
+        XCTAssertEqual(viewModel.state.groups.first?.assets.count, 2, "both photos belong to one group, once each")
+    }
+
+    /// The retry downloads over the network, so it is easily still running when the user
+    /// dismisses the filters sheet and pulls to refresh. The scan replaces `assets` wholesale
+    /// from a cache snapshot taken before that download finished, so run alongside the retry it
+    /// erases exactly the photos the user had just asked for.
+    func testRefreshDuringCloudRetryKeepsTheDownloadedPhotos() async {
+        let photoLibrary = PhotoLibraryServiceMock()
+        let cloudOnly = [makeLibraryAsset(), makeLibraryAsset()]
+        let neverHashed = makeLibraryAsset()
+        photoLibrary.libraryAssets = Set(cloudOnly + [neverHashed])
+        let hashing = ImageHashingServiceMock()
+        hashing.outcomeToReturn = .cloudOnly
+        let hashStore = HashStoreMock()
+
+        let viewModel = makePhotosViewModel(photoLibrary: photoLibrary, hashing: hashing, hashStore: hashStore)
+        await viewModel.fetch()
+        XCTAssertEqual(viewModel.processingCounts.cloudOnly, 3)
+
+        // Dropping one cache entry leaves the refresh hashing of its own to do, long enough that
+        // its `assets = …` lands after the retry's merge — the order that used to lose the
+        // download rather than the one that happens to survive it.
+        hashStore.records.removeValue(forKey: neverHashed.asset.localIdentifier)
+        hashing.outcomeToReturn = .computed(0x1234)
+        hashing.delay = .milliseconds(800)
+
+        let retry = Task { await viewModel.retryCloudOnlyAssets() }
+        await waitUntil({ isHashing(viewModel.state) }, message: "the retry should reach its hashing phase")
+        try? await Task.sleep(for: .milliseconds(200))
+
+        await viewModel.fetch()
+        await retry.value
+
+        XCTAssertEqual(viewModel.state.groups.count, 1)
+        XCTAssertEqual(
+            viewModel.state.groups.first?.assets.count,
+            3,
+            "a refresh must not drop the photos the retry had just downloaded"
+        )
+        XCTAssertEqual(viewModel.processingCounts.cloudOnly, 0)
+    }
+
+    /// Scanning is bound to the screen's lifetime (W-40), so leaving cancels the pass — but the
+    /// pass stays where callers look for it until it has unwound, which takes as long as the
+    /// hashing requests already in flight. A screen that comes straight back lands inside that
+    /// window and joins a pass that will publish nothing, so it shows the progress the previous
+    /// visit froze at and stays there until the user thinks to refresh by hand.
+    func testScreenComingBackWhileTheCancelledScanUnwindsGetsAScanOfItsOwn() async {
+        let photoLibrary = PhotoLibraryServiceMock()
+        photoLibrary.libraryAssets = Set((0 ..< 3).map { _ in makeLibraryAsset() })
+        let hashing = ImageHashingServiceMock()
+        hashing.outcomeToReturn = .computed(0x1234)
+        hashing.delay = .milliseconds(400)
+        let viewModel = makePhotosViewModel(photoLibrary: photoLibrary, hashing: hashing)
+
+        let firstVisit = Task { await viewModel.fetch() }
+        await waitUntil({ isHashing(viewModel.state) }, message: "the first visit should get as far as hashing")
+        firstVisit.cancel()
+
+        await viewModel.fetch()
+
+        XCTAssertTrue(isReady(viewModel.state), "the screen that came back should end on a result, not on stale progress")
+        XCTAssertEqual(viewModel.state.groups.first?.assets.count, 3, "and on a result covering the whole library")
+    }
+
+    /// Asking for permission is the longest a scan sits still: the system prompt stays up until
+    /// the user answers it, and the screen can be left while it is there. Reading the whole
+    /// library on the way out spends the walk on a screen that has gone, and the scan that
+    /// replaces this one waits behind it (W-40).
+    func testScanCalledOffAtThePermissionPromptNeverReadsTheLibrary() async {
+        let photoLibrary = PhotoLibraryServiceMock()
+        photoLibrary.libraryAssets = Set((0 ..< 3).map { _ in makeLibraryAsset() })
+        photoLibrary.authorizationDelay = .milliseconds(400)
+        let viewModel = makePhotosViewModel(photoLibrary: photoLibrary)
+
+        let visit = Task { await viewModel.fetch() }
+        await waitUntil(
+            { isRequestingAuthorization(viewModel.state) },
+            message: "the scan should be waiting on the permission prompt"
+        )
+        visit.cancel()
+        await visit.value
+
+        XCTAssertEqual(photoLibrary.fetchCallCount, 0, "a scan called off at the prompt shouldn't walk the library")
+    }
+
+    /// An interrupted scan got through as many photos as its hashing window held, so the records
+    /// it comes back with cover a fraction of the library. Kept, that fraction stands in for the
+    /// whole library in every answer given afterwards, each one presented as complete.
+    func testCancelledScanLeavesNoPartialLibraryBehind() async {
+        let photoLibrary = PhotoLibraryServiceMock()
+        // Comfortably more than the hashing window, so cancelling leaves most of them unhashed.
+        photoLibrary.libraryAssets = Set((0 ..< 40).map { _ in makeLibraryAsset() })
+        let hashing = ImageHashingServiceMock()
+        hashing.outcomeToReturn = .computed(0x1234)
+        hashing.delay = .milliseconds(300)
+        let viewModel = makePhotosViewModel(photoLibrary: photoLibrary, hashing: hashing)
+
+        let visit = Task { await viewModel.fetch() }
+        await waitUntil({ isHashing(viewModel.state) }, message: "the scan should get as far as hashing")
+        visit.cancel()
+        await visit.value
+
+        await viewModel.rebuildGroups()
+
+        XCTAssertTrue(
+            viewModel.state.groups.isEmpty,
+            "an interrupted scan should leave nothing behind to answer from, having read part of the library"
+        )
+    }
+}

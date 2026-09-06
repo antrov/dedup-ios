@@ -100,4 +100,21 @@ struct GroupingEngine: Sendable {
             }
             .sorted { $0.id < $1.id }
     }
+
+    /// Every identifier that was considered mapped to the group it ended up in, or `nil` if it
+    /// ended up in none (W-36) — the shape `HashStore.saveGroupAssignments` persists. Built for
+    /// the whole input at once so an identifier that dropped out of a group doesn't keep
+    /// pointing at one that no longer holds it.
+    static func assignments(for identifiers: [String], in groups: [Group]) -> [String: String?] {
+        var groupIDByIdentifier: [String: String] = [:]
+        for group in groups {
+            for identifier in group.memberIdentifiers {
+                groupIDByIdentifier[identifier] = group.id
+            }
+        }
+        // `uniqueKeysWithValues` would trap on a repeated identifier, which is the one thing the
+        // caller already goes out of its way to survive: a photo listed twice is worth showing
+        // twice, not worth taking the app down for. Both entries map to the same group anyway.
+        return Dictionary(identifiers.map { ($0, groupIDByIdentifier[$0]) }, uniquingKeysWith: { first, _ in first })
+    }
 }
