@@ -53,3 +53,11 @@ The hook lives in [scripts/git-hooks/pre-commit](scripts/git-hooks/pre-commit) �
 ```bash
 xcodebuild test -project DeDuP.xcodeproj -scheme DeDuP -destination 'platform=iOS Simulator,name=iPhone 15'
 ```
+
+Default `xcodebuild test` uses the Debug configuration. The W-53 pair-search budgets for 50k and 100k hashes are the Release figures from [docs/grouping-requirements.md](docs/grouping-requirements.md) (~0.4 s / 100k on 8 cores); Debug+coverage is ~50–100× slower, so those two cases `XCTSkip`. To actually run them:
+
+```bash
+xcodebuild test -project DeDuP.xcodeproj -scheme DeDuP -configuration Release \
+  -destination 'platform=iOS Simulator,name=iPhone 15' \
+  -only-testing:DeDuPTests/GroupingPerformanceTests
+```

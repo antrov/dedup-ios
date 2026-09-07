@@ -40,21 +40,21 @@ final class GroupingPerformanceTests: XCTestCase {
     /// measures the all-pairs scan, not the cost of storing a dense graph.
     private func measurePairSearch(count: Int, timeBudget: TimeInterval) {
         let hashes = (0 ..< count).map { _ in UInt64.random(in: .min ... .max) }
-        let residentBefore = residentMemoryBytes()
+        let peakBefore = peakResidentMemoryBytes()
 
         let started = CFAbsoluteTimeGetCurrent()
         let pairs = finder.findPairs(hashes: hashes, threshold: threshold, isCancelled: { false })
         let elapsed = CFAbsoluteTimeGetCurrent() - started
-        let residentAfter = residentMemoryBytes()
-        let residentDelta = residentAfter > residentBefore ? residentAfter - residentBefore : 0
+        let peakAfter = peakResidentMemoryBytes()
+        let peakDelta = peakAfter > peakBefore ? peakAfter - peakBefore : 0
 
         let report = """
         [W-53] pair search \(count) hashes, threshold \(threshold):
           wall time:     \(String(format: "%.3f", elapsed)) s (budget \(String(format: "%.0f", timeBudget)) s)
           pairs:         \(pairs.count)
-          RSS before:    \(residentBefore / 1_048_576) MiB
-          RSS after:     \(residentAfter / 1_048_576) MiB
-          RSS delta:     \(residentDelta / 1_048_576) MiB
+          peak RSS before: \(peakBefore / 1_048_576) MiB
+          peak RSS after:  \(peakAfter / 1_048_576) MiB
+          peak RSS delta:  \(peakDelta / 1_048_576) MiB
         """
         print(report)
 
@@ -64,7 +64,9 @@ final class GroupingPerformanceTests: XCTestCase {
             "pair search of \(count) hashes took \(elapsed)s, budget is \(timeBudget)s"
         )
         // A dense pair list would allocate gigabytes; this only catches that class of leak.
-        XCTAssertLessThan(residentDelta, 512 * 1_048_576, "peak RSS growth for \(count) hashes exceeded 512 MiB")
+        // `ru_maxrss` is the kernel high-water mark, so a spike that is freed before
+        // `findPairs` returns still shows up in the delta.
+        XCTAssertLessThan(peakDelta, 512 * 1_048_576, "peak RSS growth for \(count) hashes exceeded 512 MiB")
     }
 
     private func debugTimeBudget(release: TimeInterval, debug: TimeInterval) -> TimeInterval {
@@ -77,19 +79,19 @@ final class GroupingPerformanceTests: XCTestCase {
 
     private func skipUnlessRelease() throws {
         #if DEBUG
-            throw XCTSkip("50k/100k budgets are the Release figures from W-53; Debug+coverage is ~50–100× slower")
+            throw XCTSkip(
+                "50k/100k budgets are the Release figures from W-53; Debug+coverage is ~50–100× slower. " +
+                    "Run: xcodebuild test -scheme DeDuP -configuration Release " +
+                    "-only-testing:DeDuPTests/GroupingPerformanceTests"
+            )
         #endif
     }
 
-    private func residentMemoryBytes() -> UInt64 {
-        var info = mach_task_basic_info()
-        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size / MemoryLayout<natural_t>.size)
-        let kernResult = withUnsafeMutablePointer(to: &info) { pointer in
-            pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { rebound in
-                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), rebound, &count)
-            }
-        }
-        guard kernResult == KERN_SUCCESS else { return 0 }
-        return info.resident_size
+    /// Darwin `ru_maxrss` is the process high-water mark in bytes — not a post-return snapshot
+    /// of current RSS — so a temporary buffer freed before `findPairs` returns still counts.
+    private func peakResidentMemoryBytes() -> UInt64 {
+        var usage = rusage()
+        guard getrusage(RUSAGE_SELF, &usage) == 0 else { return 0 }
+        return UInt64(usage.ru_maxrss)
     }
 }
