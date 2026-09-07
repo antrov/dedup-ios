@@ -80,6 +80,36 @@ final class GroupingEngineTests: XCTestCase {
         XCTAssertEqual(groups, shuffledGroups)
     }
 
+    /// W-50 / B-01 / B-02: the same hashes in a randomly shuffled order must produce the same
+    /// groups, the same stable identifiers, and the same element order — not just for one
+    /// hand-picked permutation.
+    func testResultIsIndependentOfRandomShuffles() async throws {
+        let identifiers = (0 ..< 40).map { String(format: "id-%02d", $0) }
+        var hashes: [UInt64] = (0 ..< 40).map { _ in UInt64.random(in: .min ... .max) }
+        // Forced chains so the shuffle has real groups to scramble, not only singletons.
+        hashes[0] = 0
+        hashes[1] = 1
+        hashes[2] = 3
+        hashes[10] = 0xFF00
+        hashes[11] = 0xFF01
+        hashes[20] = 0
+        let threshold = 1
+
+        let groups = try await engine.makeGroups(identifiers: identifiers, hashes: hashes, threshold: threshold)
+
+        for _ in 0 ..< 10 {
+            let order = identifiers.indices.shuffled()
+            let shuffledIdentifiers = order.map { identifiers[$0] }
+            let shuffledHashes = order.map { hashes[$0] }
+            let shuffledGroups = try await engine.makeGroups(
+                identifiers: shuffledIdentifiers,
+                hashes: shuffledHashes,
+                threshold: threshold
+            )
+            XCTAssertEqual(shuffledGroups, groups)
+        }
+    }
+
     // MARK: - W-33: diameter
 
     func testDiameterIsTheLargestPairwiseDistanceInTheGroupNotJustTheThreshold() async throws {
