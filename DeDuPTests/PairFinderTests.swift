@@ -43,9 +43,17 @@ final class PairFinderTests: XCTestCase {
         XCTAssertEqual(pairs.count, 20 * 19 / 2, "every one of the C(20, 2) pairs should be found")
     }
 
-    func testMatchesNaiveDoubleLoopOnRandomData() {
-        let hashes: [UInt64] = (0 ..< 200).map { _ in UInt64.random(in: .min ... .max) }
-        let threshold = 20
+    /// W-49: the finder must match a naive double loop as a set — including pairs that would
+    /// be easy to miss if a filter or a parallel split dropped "known-close" neighbours.
+    func testMatchesNaiveDoubleLoopOnRandomDataWithForcedClosePairs() {
+        var hashes: [UInt64] = (0 ..< 200).map { _ in UInt64.random(in: .min ... .max) }
+        hashes[0] = PHash.informativeBitsMask
+        hashes[1] = PHash.informativeBitsMask
+        hashes[2] = PHash.informativeBitsMask ^ (UInt64(1) << 9)
+        hashes[3] = PHash.informativeBitsMask ^ (UInt64(1) << 9) ^ (UInt64(1) << 17)
+        hashes[50] = 0
+        hashes[199] = 0
+        let threshold = 4
 
         var expected = Set<HashPair>()
         for lowerIndex in hashes.indices {
@@ -55,8 +63,13 @@ final class PairFinderTests: XCTestCase {
             }
         }
 
-        let actual = Set(findPairs(hashes: hashes, threshold: threshold))
-        XCTAssertEqual(actual, expected)
+        let pairs = findPairs(hashes: hashes, threshold: threshold)
+        XCTAssertTrue(pairs.allSatisfy { $0.lowerIndex != $0.upperIndex })
+        XCTAssertEqual(Set(pairs).count, pairs.count, "no pair should be reported twice")
+        XCTAssertEqual(Set(pairs), expected)
+        XCTAssertTrue(expected.contains(HashPair(lowerIndex: 0, upperIndex: 1)))
+        XCTAssertTrue(expected.contains(HashPair(lowerIndex: 0, upperIndex: 2)))
+        XCTAssertTrue(expected.contains(HashPair(lowerIndex: 50, upperIndex: 199)))
     }
 
     func testEmptyAndSingleElementInputsProduceNoPairs() {
