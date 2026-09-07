@@ -3,6 +3,7 @@
 //  DeDuPTests
 //
 
+import CocoaImageHashing
 @testable import DeDuP
 import XCTest
 
@@ -56,5 +57,46 @@ final class PHashTests: XCTestCase {
     func testOSHashTypeErrorBitPatternIsInvalid() {
         // OSHashTypeError is defined as `-1` (OSTypes.m); reinterpreted as UInt64 that's all bits set.
         XCTAssertFalse(PHash.isValid(UInt64(bitPattern: -1)))
+    }
+
+    /// W-48: the grouping layer's own Hamming distance must stay equivalent to the library's
+    /// `hashDistance`, including the extreme bit patterns a real hash can take. The library
+    /// `NSAssert`s on `OSHashTypeError` (`-1` / all bits set) and refuses to compare it, so that
+    /// sentinel is checked only on our side — every other pair, including the high bit, goes
+    /// through both functions.
+    func testDistanceMatchesCocoaImageHashingOnRandomAndExtremePairs() {
+        let errorHash = UInt64(bitPattern: OSHashTypeError)
+        XCTAssertEqual(PHash.distance(errorHash, 0), 64)
+        XCTAssertEqual(PHash.distance(errorHash, errorHash), 0)
+
+        let extremes: [(UInt64, UInt64)] = [
+            (0, 0),
+            (0, 1),
+            (1, 2),
+            (0, UInt64(bitPattern: Int64.max)),
+            (UInt64(bitPattern: Int64.min), 0),
+            (UInt64(bitPattern: Int64.min), UInt64(bitPattern: Int64.max)),
+            (PHash.informativeBitsMask, 0),
+            (PHash.informativeBitsMask, PHash.alwaysZeroMask)
+        ]
+        let randomPairs = (0 ..< 400).compactMap { _ -> (UInt64, UInt64)? in
+            let lhs = UInt64.random(in: .min ... .max)
+            let rhs = UInt64.random(in: .min ... .max)
+            guard lhs != errorHash, rhs != errorHash else { return nil }
+            return (lhs, rhs)
+        }
+
+        for (lhs, rhs) in extremes + randomPairs {
+            let libraryDistance = OSImageHashing.sharedInstance().hashDistance(
+                Int64(bitPattern: lhs),
+                to: Int64(bitPattern: rhs),
+                with: .pHash
+            )
+            XCTAssertEqual(
+                PHash.distance(lhs, rhs),
+                Int(libraryDistance),
+                "PHash.distance(\(lhs), \(rhs)) should match CocoaImageHashing"
+            )
+        }
     }
 }

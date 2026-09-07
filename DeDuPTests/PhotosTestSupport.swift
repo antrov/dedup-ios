@@ -13,10 +13,12 @@ import XCTest
 final class StubAsset: PHAsset, @unchecked Sendable {
     private let identifier: String
     private let source: PHAssetSourceType
+    private let modified: Date?
 
-    init(identifier: String, sourceType: PHAssetSourceType) {
+    init(identifier: String, sourceType: PHAssetSourceType, modificationDate: Date? = nil) {
         self.identifier = identifier
         source = sourceType
+        modified = modificationDate
         super.init()
     }
 
@@ -28,13 +30,22 @@ final class StubAsset: PHAsset, @unchecked Sendable {
     override var sourceType: PHAssetSourceType {
         source
     }
+
+    /// What cache invalidation (W-11) compares against the stored `modification_date`.
+    override var modificationDate: Date? {
+        modified
+    }
 }
 
 func makeLibraryAsset(
     identifier: String = UUID().uuidString,
-    sourceType: PHAssetSourceType = .typeUserLibrary
+    sourceType: PHAssetSourceType = .typeUserLibrary,
+    modificationDate: Date? = nil
 ) -> LibraryAsset {
-    LibraryAsset(asset: StubAsset(identifier: identifier, sourceType: sourceType), collections: [PHAssetCollection]())
+    LibraryAsset(
+        asset: StubAsset(identifier: identifier, sourceType: sourceType, modificationDate: modificationDate),
+        collections: [PHAssetCollection]()
+    )
 }
 
 func isHashing(_ state: PhotosScreenState) -> Bool {
