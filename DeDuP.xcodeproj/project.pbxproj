@@ -27,6 +27,7 @@
 		694021DED5D94D8EBB80EECD /* AppDatabase.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4300787CF384062A2997EF3 /* AppDatabase.swift */; };
 		6A02991040514908A5B992A5 /* PhotosTestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7AAB990B1554D5C8E55A378 /* PhotosTestSupport.swift */; };
 		6B240E961FC270BC83BA2D75 /* GroupingEngineTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DFFFCB62CCBC6476E57D065 /* GroupingEngineTests.swift */; };
+		9D21F4A86E5C4B1F8A03D7C6 /* GroupingPerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C8E91A04B6F4E2A9D17C5B8 /* GroupingPerformanceTests.swift */; };
 		6C716691D9F945D1AFA8D51C /* AssetHashingPipeline.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D7486E2ECC14F04A9FBF9AC /* AssetHashingPipeline.swift */; };
 		7025DD167CACAF9A42758980 /* PhotoLibraryServiceMock.swift in Sources */ = {isa = PBXBuildFile; fileRef = BADBF6A65E3EBBB94F6D1881 /* PhotoLibraryServiceMock.swift */; };
 		72EF0A1B2C3D5FF65DC5C8DD /* PairFinderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26A2086573E1FEEA25FD58DA /* PairFinderTests.swift */; };
@@ -91,6 +92,7 @@
 		62751760C6194F8C8644EF13 /* PhotosScreenState.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PhotosScreenState.swift; sourceTree = "<group>"; };
 		67D797F136B664626107BD90 /* ImageHashingService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ImageHashingService.swift; sourceTree = "<group>"; };
 		6DFFFCB62CCBC6476E57D065 /* GroupingEngineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupingEngineTests.swift; sourceTree = "<group>"; };
+		3C8E91A04B6F4E2A9D17C5B8 /* GroupingPerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GroupingPerformanceTests.swift; sourceTree = "<group>"; };
 		8121446649034AD7A5FD1E09 /* PhotosViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotosViewModelTests.swift; sourceTree = "<group>"; };
 		892EA71C38B5A50204D83D79 /* PairFinder.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PairFinder.swift; sourceTree = "<group>"; };
 		959C26DCC53C5D34A7E9AB57 /* PHash.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PHash.swift; sourceTree = "<group>"; };
@@ -265,6 +267,7 @@
 				157CCCFDDD28313BFCFF6DC9 /* DisjointSetTests.swift */,
 				26A2086573E1FEEA25FD58DA /* PairFinderTests.swift */,
 				6DFFFCB62CCBC6476E57D065 /* GroupingEngineTests.swift */,
+				3C8E91A04B6F4E2A9D17C5B8 /* GroupingPerformanceTests.swift */,
 				789BEE9A267326A1DBC20131 /* Mocks */,
 			);
 			path = DeDuPTests;
@@ -480,6 +483,7 @@
 				7737B8182825C4A3CF253FA6 /* DisjointSetTests.swift in Sources */,
 				72EF0A1B2C3D5FF65DC5C8DD /* PairFinderTests.swift in Sources */,
 				6B240E961FC270BC83BA2D75 /* GroupingEngineTests.swift in Sources */,
+				9D21F4A86E5C4B1F8A03D7C6 /* GroupingPerformanceTests.swift in Sources */,
 				9198D50201545CD6D2341FDA /* PhotoLibraryServiceMock.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
