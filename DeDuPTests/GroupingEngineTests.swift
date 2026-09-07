@@ -157,4 +157,57 @@ final class GroupingEngineTests: XCTestCase {
             XCTFail("expected CancellationError, got \(error)")
         }
     }
+
+    /// W-51: the engine's connected components must match a naive single-linkage reference —
+    /// all-pairs, then union-find, then the same id / sort rules — on a set that includes
+    /// forced chains (section 2).
+    func testGroupsMatchNaiveConnectedComponentsOnForcedChains() async throws {
+        var identifiers = (0 ..< 24).map { String(format: "n-%02d", $0) }
+        var hashes: [UInt64] = (0 ..< 24).map { _ in UInt64.random(in: .min ... .max) }
+        identifiers[0] = "chain-a"
+        identifiers[1] = "chain-b"
+        identifiers[2] = "chain-c"
+        hashes[0] = 0b0000
+        hashes[1] = 0b0001
+        hashes[2] = 0b0011
+        identifiers[8] = "other-x"
+        identifiers[9] = "other-y"
+        hashes[8] = 0xFF
+        hashes[9] = 0xFE
+        hashes[15] = 0xFFFF_FFFF
+
+        let threshold = 1
+        let expected = naiveGroups(identifiers: identifiers, hashes: hashes, threshold: threshold)
+        let actual = try await engine.makeGroups(identifiers: identifiers, hashes: hashes, threshold: threshold)
+        XCTAssertEqual(actual, expected)
+    }
+}
+
+/// Single-linkage reference for W-51: a straightforward double loop plus union-find, then the
+/// same identifier / sort rules as `GroupingEngine`. Lives only in the test target.
+private func naiveGroups(identifiers: [String], hashes: [UInt64], threshold: Int) -> [GroupingEngine.Group] {
+    var disjointSet = DisjointSet(count: identifiers.count)
+    for lowerIndex in identifiers.indices {
+        for upperIndex in (lowerIndex + 1) ..< identifiers.count {
+            guard PHash.distance(hashes[lowerIndex], hashes[upperIndex]) <= threshold else { continue }
+            disjointSet.union(lowerIndex, upperIndex)
+        }
+    }
+
+    var membersByRoot: [Int: [Int]] = [:]
+    for index in identifiers.indices {
+        membersByRoot[disjointSet.find(index), default: []].append(index)
+    }
+
+    return membersByRoot.values
+        .filter { $0.count > 1 }
+        .map { members in
+            let sortedIdentifiers = members.map { identifiers[$0] }.sorted()
+            return GroupingEngine.Group(
+                id: sortedIdentifiers.first ?? "",
+                memberIdentifiers: sortedIdentifiers,
+                diameter: PHash.diameter(of: members.map { hashes[$0] })
+            )
+        }
+        .sorted { $0.id < $1.id }
 }
