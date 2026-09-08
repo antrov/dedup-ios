@@ -50,9 +50,12 @@ struct ContentView: View {
             .navigationTitle("DeDuP")
             .toolbar { toolbarContent }
             // Awaits the scan itself, so the refresh indicator stays up until the work is
-            // actually done instead of vanishing the moment the gesture ends (W-41, B-13).
+            // actually done instead of vanishing the moment the gesture ends (W-41, B-13). A
+            // manual pull always asks for the exhaustive walk (W-56): the one user-reachable way
+            // to force a from-scratch answer if the incremental one the app uses on its own is
+            // ever wrong.
             .refreshable {
-                await viewModel.fetch()
+                await viewModel.fetch(forceFullScan: true)
             }
             // Scanning is driven by the view's lifecycle, not by the view model's initializer
             // (W-40): it starts when the screen appears and is cancelled when it goes away, so
@@ -160,7 +163,7 @@ struct ContentView: View {
                     Text(message)
                 } actions: {
                     Button("Try again") {
-                        Task { await viewModel.fetch() }
+                        Task { await viewModel.fetch(forceFullScan: true) }
                     }
                 }
             }

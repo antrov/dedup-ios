@@ -165,4 +165,57 @@ final class PhotosViewModelTests: XCTestCase {
         XCTAssertEqual(hashStore.records[identifier]?.failureReason, "boom")
         XCTAssertEqual(viewModel.processingCounts.failed, 1)
     }
+
+    // MARK: - W-55 / W-56: an automatic scan reuses the hash cache instead of walking the whole library
+
+    func testAutomaticFetchGoesThroughTheIncrementalPathSeededFromTheCache() async {
+        let photoLibrary = PhotoLibraryServiceMock()
+        let hashing = ImageHashingServiceMock()
+        let hashStore = HashStoreMock()
+
+        let libraryAsset = makeLibraryAsset()
+        let identifier = libraryAsset.asset.localIdentifier
+        photoLibrary.libraryAssets = [libraryAsset]
+        hashStore.records[identifier] = makeHashRecord(
+            identifier: identifier,
+            modificationDate: libraryAsset.asset.modificationDate,
+            collectionIdentifiers: ["album-1"]
+        )
+
+        let viewModel = PhotosViewModel(photoLibrary: photoLibrary, hashing: hashing, hashStore: hashStore)
+        await viewModel.fetch()
+
+        XCTAssertEqual(photoLibrary.reusingFetchCallCount, 1, "an unforced fetch should ask for the incremental path")
+        XCTAssertEqual(
+            photoLibrary.lastPreviousSnapshot?.map(\.localIdentifier), [identifier],
+            "the cache's own inventory should seed the incremental walk"
+        )
+        XCTAssertEqual(photoLibrary.lastPreviousSnapshot?.first?.collectionIdentifiers, ["album-1"])
+    }
+
+    func testFirstEverFetchHasNothingToSeedTheIncrementalPathWith() async {
+        let photoLibrary = PhotoLibraryServiceMock()
+        let hashing = ImageHashingServiceMock()
+        let hashStore = HashStoreMock()
+        photoLibrary.libraryAssets = [makeLibraryAsset()]
+
+        let viewModel = PhotosViewModel(photoLibrary: photoLibrary, hashing: hashing, hashStore: hashStore)
+        await viewModel.fetch()
+
+        XCTAssertEqual(photoLibrary.reusingFetchCallCount, 1)
+        XCTAssertEqual(photoLibrary.lastPreviousSnapshot, [], "an empty cache means nothing to reuse yet")
+    }
+
+    func testForcedFullScanSkipsTheIncrementalPath() async {
+        let photoLibrary = PhotoLibraryServiceMock()
+        let hashing = ImageHashingServiceMock()
+        let hashStore = HashStoreMock()
+        photoLibrary.libraryAssets = [makeLibraryAsset()]
+
+        let viewModel = PhotosViewModel(photoLibrary: photoLibrary, hashing: hashing, hashStore: hashStore)
+        await viewModel.fetch(forceFullScan: true)
+
+        XCTAssertEqual(photoLibrary.reusingFetchCallCount, 0, "pull-to-refresh must always get the exhaustive walk")
+        XCTAssertEqual(photoLibrary.fetchCallCount, 1)
+    }
 }

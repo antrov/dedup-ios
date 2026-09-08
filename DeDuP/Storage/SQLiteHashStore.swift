@@ -90,6 +90,9 @@ extension HashRecord: FetchableRecord {
         failureReason = row["failure_reason"]
         groupID = row["group_id"]
         updatedAt = row["updated_at"]
+        collectionIdentifiers = ((row["collection_identifiers"] as String?) ?? "")
+            .split(separator: ",")
+            .map(String.init)
     }
 }
 
@@ -106,5 +109,6 @@ extension HashRecord: PersistableRecord {
         container["failure_reason"] = failureReason
         container["group_id"] = groupID
         container["updated_at"] = updatedAt
+        container["collection_identifiers"] = collectionIdentifiers.isEmpty ? nil : collectionIdentifiers.joined(separator: ",")
     }
 }

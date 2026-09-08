@@ -18,6 +18,24 @@ protocol PhotoLibraryServiceProtocol {
     /// scan phase can be shown with real progress instead of an unlabelled spinner (W-38).
     func fetchLibraryAssets(onProgress: @escaping @Sendable (Int, Int) -> Void) async -> Set<LibraryAsset>
 
+    /// Reuses `previousSnapshot` — the previous scan's identifiers and album membership — instead
+    /// of re-deriving everything from scratch (W-55): a photo present in both is assumed
+    /// unchanged and keeps the album membership it already had, so only a genuinely new photo
+    /// pays for the per-album walk that finds out which albums it's in. An empty snapshot (the
+    /// very first scan) makes every photo "new," so this does exactly the work
+    /// `fetchLibraryAssets` always has.
+    ///
+    /// This only ever narrows *how* the current library is discovered, never *what* counts as
+    /// having changed: hash-cache validity still turns on `PHAsset.modificationDate` (W-11), and a
+    /// photo missing from the result is still pruned from the cache the same way a full scan would
+    /// prune it (W-13). What it can miss is a photo moving between two albums it was already in
+    /// without anything else about it changing — the album name shown for it can lag until the
+    /// next full `fetchLibraryAssets` (pull-to-refresh, or the first scan after this one fails).
+    func fetchLibraryAssets(
+        reusing previousSnapshot: [LibraryAssetSnapshot],
+        onProgress: @escaping @Sendable (Int, Int) -> Void
+    ) async -> Set<LibraryAsset>
+
     /// Cancelling the calling task cancels the underlying PhotoKit request (W-42), so a cell
     /// scrolled off screen stops occupying a slot in PhotoKit's queue.
     func requestThumbnail(for asset: LibraryAsset, size: CGSize) async -> UIImage?
@@ -27,14 +45,27 @@ protocol PhotoLibraryServiceProtocol {
     var libraryChanges: AsyncStream<Void> { get }
 }
 
+extension PhotoLibraryServiceProtocol {
+    /// Default for every conformance that has no cheaper way to answer (every mock/fake, and any
+    /// future non-PhotoKit backend): the full walk is always correct, just not always the fastest
+    /// route there.
+    func fetchLibraryAssets(
+        reusing previousSnapshot: [LibraryAssetSnapshot],
+        onProgress: @escaping @Sendable (Int, Int) -> Void
+    ) async -> Set<LibraryAsset> {
+        await fetchLibraryAssets(onProgress: onProgress)
+    }
+}
+
 final class PhotoLibraryService: NSObject, PhotoLibraryServiceProtocol, PHPhotoLibraryChangeObserver, @unchecked Sendable {
     /// "Images only" applied at the fetch-options level, on every path that pulls assets out of
     /// the library (W-20) — previously only the iCloud-shared-album path filtered by media type,
     /// so videos from regular albums reached the hashing service and were rejected there instead
     /// (B-17).
+    private static let imageOnlyPredicate = NSPredicate(format: "mediaType = %d", PHAssetMediaType.image.rawValue)
     private static let imageOnlyOptions: PHFetchOptions = {
         let options = PHFetchOptions()
-        options.predicate = NSPredicate(format: "mediaType = %d", PHAssetMediaType.image.rawValue)
+        options.predicate = imageOnlyPredicate
         return options
     }()
 
@@ -204,6 +235,134 @@ final class PhotoLibraryService: NSObject, PhotoLibraryServiceProtocol, PHPhotoL
         }
 
         return Set(assetDict.values)
+    }
+
+    func fetchLibraryAssets(
+        reusing previousSnapshot: [LibraryAssetSnapshot],
+        onProgress: @escaping @Sendable (Int, Int) -> Void
+    ) async -> Set<LibraryAsset> {
+        // Nothing recorded yet — the very first scan — so every photo is "new" regardless; the
+        // full walk is exactly the right amount of work, and it's the one path guaranteed to seed
+        // `lastFetchPasses`/`lastCollectionFetches` properly for the live observer below.
+        guard !previousSnapshot.isEmpty else {
+            return await fetchLibraryAssets(onProgress: onProgress)
+        }
+
+        var previousCollectionsByID = [String: [String]](minimumCapacity: previousSnapshot.count)
+        for entry in previousSnapshot {
+            previousCollectionsByID[entry.localIdentifier] = entry.collectionIdentifiers
+        }
+
+        var assetDict = [String: LibraryAsset]()
+
+        // Shared albums are usually few, so — same as a full scan — they're still walked in full:
+        // exact membership and insert/delete detection without a separate diffing story for them.
+        let sharedCollectionsFetch = PHAssetCollection.fetchAssetCollections(
+            with: .album, subtype: .albumCloudShared, options: nil
+        )
+        var sharedPasses: [(assets: PHFetchResult<PHAsset>, collection: PHAssetCollection?)] = []
+        sharedCollectionsFetch.enumerateObjects { collection, _, _ in
+            sharedPasses.append((PHAsset.fetchAssets(in: collection, options: Self.imageOnlyOptions), collection))
+        }
+        for pass in sharedPasses {
+            guard let collection = pass.collection else { continue }
+            pass.assets.enumerateObjects { asset, _, _ in
+                Self.mergeCollection(collection, for: asset, into: &assetDict)
+            }
+        }
+
+        // The rest of the library is one predicate-filtered fetch (W-01), cheap regardless of how
+        // many regular albums exist, and gives every remaining photo its live `PHAsset` whether or
+        // not anything about it changed.
+        let mainFetchOptions = PHFetchOptions()
+        mainFetchOptions.includeAssetSourceTypes = [.typeUserLibrary, .typeiTunesSynced]
+        mainFetchOptions.predicate = Self.imageOnlyPredicate
+        let mainLibraryFetch = PHAsset.fetchAssets(with: .image, options: mainFetchOptions)
+
+        var newIdentifiers = Set<String>()
+        mainLibraryFetch.enumerateObjects { asset, _, _ in
+            guard assetDict[asset.localIdentifier] == nil else { return }
+            if previousCollectionsByID[asset.localIdentifier] == nil {
+                newIdentifiers.insert(asset.localIdentifier)
+            }
+            // Collections are filled in below, once regular-album membership for new photos —
+            // and reused membership for everyone else — has been resolved.
+            assetDict[asset.localIdentifier] = LibraryAsset(asset: asset, collections: [])
+        }
+
+        // Only a scan that actually found a new photo pays for a per-regular-album walk at all
+        // (W-55) — reopening the app with nothing new added since skips it entirely, which is the
+        // common case this exists for. When it does run, it walks each album the same way
+        // `fetchPasses()` always has (PhotoKit's supported predicate keys for `PHAsset` are
+        // deliberately kept to the same handful already proven here — W-20's `mediaType` filter —
+        // rather than risking an undocumented `localIdentifier IN` predicate), and just ignores
+        // anything that isn't one of the new identifiers.
+        if !newIdentifiers.isEmpty {
+            let regularCollectionsFetch = PHAssetCollection.fetchAssetCollections(
+                with: .album, subtype: .albumRegular, options: nil
+            )
+            regularCollectionsFetch.enumerateObjects { collection, _, _ in
+                PHAsset.fetchAssets(in: collection, options: Self.imageOnlyOptions).enumerateObjects { asset, _, _ in
+                    guard newIdentifiers.contains(asset.localIdentifier) else { return }
+                    Self.mergeCollection(collection, for: asset, into: &assetDict)
+                }
+            }
+        }
+
+        // Everything else — a photo already known before this scan — keeps the album membership
+        // recorded on it last time (W-54), resolved back into live `PHAssetCollection`s with one
+        // batched lookup instead of one fetch per photo. Snapshotted into a plain array first:
+        // `assetDict` is mutated below, and `.keys` is a live view over the same storage, not a
+        // copy, so iterating it directly while writing to the dictionary is not safe.
+        let keptIdentifiers = assetDict.keys.filter { !newIdentifiers.contains($0) }
+
+        var collectionIdentifiersToResolve = Set<String>()
+        for identifier in keptIdentifiers {
+            collectionIdentifiersToResolve.formUnion(previousCollectionsByID[identifier] ?? [])
+        }
+        if !collectionIdentifiersToResolve.isEmpty {
+            var resolvedCollections = [String: PHAssetCollection](minimumCapacity: collectionIdentifiersToResolve.count)
+            PHAssetCollection.fetchAssetCollections(
+                withLocalIdentifiers: Array(collectionIdentifiersToResolve), options: nil
+            ).enumerateObjects { collection, _, _ in
+                resolvedCollections[collection.localIdentifier] = collection
+            }
+            for identifier in keptIdentifiers {
+                guard let libraryAsset = assetDict[identifier], libraryAsset.collections.isEmpty else { continue }
+                let collections = (previousCollectionsByID[identifier] ?? []).compactMap { resolvedCollections[$0] }
+                guard !collections.isEmpty else { continue }
+                assetDict[identifier] = LibraryAsset(asset: libraryAsset.asset, collections: collections)
+            }
+        }
+
+        onProgress(assetDict.count, assetDict.count)
+
+        // Keeps the live, in-foreground change observer working (W-55): it can no longer notice a
+        // photo moving between two regular albums it already knew about — the same trade made
+        // above — but still catches a photo being added to, or removed from, the library or a
+        // shared album while the app stays open.
+        passesLock.lock()
+        lastFetchPasses = [(assets: mainLibraryFetch, collection: nil)] + sharedPasses
+        lastCollectionFetches = [sharedCollectionsFetch]
+        passesLock.unlock()
+
+        return Set(assetDict.values)
+    }
+
+    /// Adds `collection` to whatever `asset` is already recorded under in `assetDict`, or records
+    /// it fresh — the same accumulation `fetchLibraryAssets` does inline, factored out so the
+    /// incremental scan above can reuse it for both its shared- and regular-album passes.
+    private static func mergeCollection(
+        _ collection: PHAssetCollection,
+        for asset: PHAsset,
+        into assetDict: inout [String: LibraryAsset]
+    ) {
+        if let existing = assetDict[asset.localIdentifier] {
+            guard !existing.collections.contains(collection) else { return }
+            assetDict[asset.localIdentifier] = LibraryAsset(asset: asset, collections: existing.collections + [collection])
+        } else {
+            assetDict[asset.localIdentifier] = LibraryAsset(asset: asset, collections: [collection])
+        }
     }
 
     /// The three paths assets are pulled from, in the order that decides which album an asset

@@ -53,6 +53,11 @@ final class PhotoLibraryServiceMock: PhotoLibraryServiceProtocol, @unchecked Sen
     }
 
     var fetchCallCount = 0
+    /// Lets a test tell "went through the incremental path" apart from "did a full walk" (W-55),
+    /// which `fetchCallCount` alone can't: the default implementation of the `reusing:` overload
+    /// falls back to the very method `fetchCallCount` already counts.
+    var reusingFetchCallCount = 0
+    var lastPreviousSnapshot: [LibraryAssetSnapshot]?
     var thumbnailRequestCount = 0
     var deletedAssets: [LibraryAsset] = []
 
@@ -77,6 +82,18 @@ final class PhotoLibraryServiceMock: PhotoLibraryServiceProtocol, @unchecked Sen
     }
 
     func fetchLibraryAssets(onProgress: @escaping @Sendable (Int, Int) -> Void) async -> Set<LibraryAsset> {
+        fetchCallCount += 1
+        let assets = assetsToReturn
+        onProgress(assets.count, assets.count)
+        return assets
+    }
+
+    func fetchLibraryAssets(
+        reusing previousSnapshot: [LibraryAssetSnapshot],
+        onProgress: @escaping @Sendable (Int, Int) -> Void
+    ) async -> Set<LibraryAsset> {
+        reusingFetchCallCount += 1
+        lastPreviousSnapshot = previousSnapshot
         fetchCallCount += 1
         let assets = assetsToReturn
         onProgress(assets.count, assets.count)

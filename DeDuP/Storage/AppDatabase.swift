@@ -86,6 +86,16 @@ final class AppDatabase {
             try db.create(index: "asset_hashes_on_group_id", on: "asset_hashes", columns: ["group_id"])
         }
 
+        // A photo's last-known album membership (W-54), comma-joined — local identifiers are
+        // GUID-shaped and never contain a comma. `NULL` on every pre-existing row reads back as
+        // "no albums recorded yet," the same as a photo genuinely in none: an incremental scan
+        // treats it as unresolved and, if it's ever new again, walks the albums for it directly.
+        migrator.registerMigration("addCollectionIdentifiers") { db in
+            try db.alter(table: "asset_hashes") { table in
+                table.add(column: "collection_identifiers", .text)
+            }
+        }
+
         return migrator
     }
 }

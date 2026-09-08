@@ -131,6 +131,23 @@ final class HashStoreTests: XCTestCase {
         XCTAssertEqual(assignments, ["B": "new-group"])
     }
 
+    func testCollectionIdentifiersRoundTrip() async throws {
+        let record = makeRecord(id: "A")
+        var withCollections = record
+        withCollections.collectionIdentifiers = ["album-1", "album-2"]
+        try await store.save([withCollections])
+
+        let loaded = try await store.load(identifiers: ["A"])
+        XCTAssertEqual(loaded.first?.collectionIdentifiers, ["album-1", "album-2"])
+    }
+
+    func testEmptyCollectionIdentifiersRoundTripAsEmpty() async throws {
+        try await store.save([makeRecord(id: "A")])
+
+        let loaded = try await store.load(identifiers: ["A"])
+        XCTAssertEqual(loaded.first?.collectionIdentifiers, [])
+    }
+
     func testEmptyBatchesAreNoOps() async throws {
         try await store.save([])
         try await store.delete(identifiers: [])

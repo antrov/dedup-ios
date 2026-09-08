@@ -37,14 +37,30 @@ final class StubAsset: PHAsset, @unchecked Sendable {
     }
 }
 
+/// Stands in for a real album in tests the same way `StubAsset` stands in for a real photo: a bare
+/// `PHAssetCollection()` leaves `localIdentifier` empty, indistinguishable from any other bare one.
+final class StubAssetCollection: PHAssetCollection, @unchecked Sendable {
+    private let identifier: String
+
+    init(identifier: String) {
+        self.identifier = identifier
+        super.init()
+    }
+
+    override var localIdentifier: String {
+        identifier
+    }
+}
+
 func makeLibraryAsset(
     identifier: String = UUID().uuidString,
     sourceType: PHAssetSourceType = .typeUserLibrary,
-    modificationDate: Date? = nil
+    modificationDate: Date? = nil,
+    collections: [PHAssetCollection] = []
 ) -> LibraryAsset {
     LibraryAsset(
         asset: StubAsset(identifier: identifier, sourceType: sourceType, modificationDate: modificationDate),
-        collections: [PHAssetCollection]()
+        collections: collections
     )
 }
 
@@ -96,7 +112,8 @@ func makeHashRecord(
     phash: UInt64? = 1,
     hashVersion: Int = HashingPipeline.version,
     modificationDate: Date? = nil,
-    state: HashRecord.State = .computed
+    state: HashRecord.State = .computed,
+    collectionIdentifiers: [String] = []
 ) -> HashRecord {
     HashRecord(
         localIdentifier: identifier,
@@ -107,7 +124,8 @@ func makeHashRecord(
         state: state,
         failureReason: nil,
         groupID: nil,
-        updatedAt: Date()
+        updatedAt: Date(),
+        collectionIdentifiers: collectionIdentifiers
     )
 }
 

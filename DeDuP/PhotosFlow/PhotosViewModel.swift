@@ -113,12 +113,18 @@ final class PhotosViewModel: ObservableObject {
         startListeningToChanges()
     }
 
-    /// Runs a full scan — or joins the one already in flight — and returns only once it has
-    /// actually finished (W-41), which is what lets the pull-to-refresh gesture keep its spinner
-    /// up for as long as the work lasts (B-13). Cancelling the caller cancels the scan itself,
-    /// so the view disappearing stops the work (W-40).
-    func fetch() async {
-        let task = passToJoin(scanTask) ?? makeScanTask()
+    /// Runs a scan — or joins the one already in flight — and returns only once it has actually
+    /// finished (W-41), which is what lets the pull-to-refresh gesture keep its spinner up for as
+    /// long as the work lasts (B-13). Cancelling the caller cancels the scan itself, so the view
+    /// disappearing stops the work (W-40).
+    ///
+    /// `forceFullScan` skips the incremental library walk (W-56) in favour of the exhaustive one:
+    /// pull-to-refresh and the failure-screen retry both ask for it, so there's always a
+    /// user-reachable way to get a from-scratch answer if the incremental one is ever wrong. A
+    /// caller that joins a pass already in flight gets whatever that pass was already started
+    /// with — this only decides how a *new* pass begins.
+    func fetch(forceFullScan: Bool = false) async {
+        let task = passToJoin(scanTask) ?? makeScanTask(forceFullScan: forceFullScan)
         await withTaskCancellationHandler {
             await task.value
         } onCancel: {
@@ -442,8 +448,8 @@ private extension PhotosViewModel {
         return pass
     }
 
-    func makeScanTask() -> Task<Void, Never> {
-        let task = makePass { await $0.runScan() }
+    func makeScanTask(forceFullScan: Bool) -> Task<Void, Never> {
+        let task = makePass { await $0.runScan(forceFullScan: forceFullScan) }
         scanTask = task
         return task
     }
@@ -451,7 +457,7 @@ private extension PhotosViewModel {
     /// One pass over the library: fetch assets, resolve their hashes (cache-first), drop cache
     /// rows for photos that are gone (W-13), then group. Cancellation is checked between phases
     /// (W-24) — an interrupted scan leaves the cache and the last published groups intact.
-    func runScan() async {
+    func runScan(forceFullScan: Bool) async {
         guard !Task.isCancelled else { return }
 
         enterPhase(.requestingAuthorization)
@@ -467,7 +473,7 @@ private extension PhotosViewModel {
         guard !Task.isCancelled else { return }
 
         enterPhase(.scanningLibrary(PhaseProgress()))
-        let fetchedAssets = await photoLibrary.fetchLibraryAssets { [weak self] completed, total in
+        let fetchedAssets = await fetchLibraryAssets(forceFullScan: forceFullScan) { [weak self] completed, total in
             Task { @MainActor in
                 self?.reportLibraryScanProgress(PhaseProgress(completed: completed, total: total))
             }
@@ -494,6 +500,26 @@ private extension PhotosViewModel {
         guard !Task.isCancelled else { return }
 
         await rebuildGroups()
+    }
+
+    /// Seeds the incremental library walk from the hash cache's own inventory (W-55): every row
+    /// in it already carries the identifier, and now the album membership, a previous scan last
+    /// resolved for that photo, so there's nothing further to persist just for this. Falls back to
+    /// the exhaustive walk outright when the cache is empty (first-ever scan, or one just cleared)
+    /// or the caller demands it (pull-to-refresh, failure retry) — `PhotoLibraryService` itself
+    /// also degrades to that whenever the snapshot it's handed is empty, so this mirrors rather
+    /// than depends on that fallback.
+    func fetchLibraryAssets(
+        forceFullScan: Bool,
+        onProgress: @escaping @Sendable (Int, Int) -> Void
+    ) async -> Set<LibraryAsset> {
+        guard !forceFullScan else {
+            return await photoLibrary.fetchLibraryAssets(onProgress: onProgress)
+        }
+        let previousSnapshot = ((try? await hashStore.loadAll()) ?? []).map {
+            LibraryAssetSnapshot(localIdentifier: $0.localIdentifier, collectionIdentifiers: $0.collectionIdentifiers)
+        }
+        return await photoLibrary.fetchLibraryAssets(reusing: previousSnapshot, onProgress: onProgress)
     }
 
     func makeRetryTask() -> Task<Void, Never> {

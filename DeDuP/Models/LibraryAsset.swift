@@ -33,3 +33,12 @@ struct LibraryAsset: Hashable, CustomStringConvertible {
         lhs.asset.localIdentifier == rhs.asset.localIdentifier
     }
 }
+
+/// The persisted half of a `LibraryAsset` (W-54): a plain identifier and the album identifiers it
+/// was last seen in, with no live `PHAsset`/`PHAssetCollection` — a fresh process never has one to
+/// give it. An incremental library scan reuses this for a photo it recognizes instead of
+/// re-deriving its album membership from scratch.
+struct LibraryAssetSnapshot: Hashable {
+    let localIdentifier: String
+    let collectionIdentifiers: [String]
+}

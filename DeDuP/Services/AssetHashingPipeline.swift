@@ -48,11 +48,25 @@ struct AssetHashingPipeline {
 
         var recordsByID: [String: HashRecord] = [:]
         var needsHashing: [LibraryAsset] = []
+        var collectionsToRefresh: [HashRecord] = []
 
         for libraryAsset in libraryAssets {
             let identifier = libraryAsset.asset.localIdentifier
             if let record = cachedByID[identifier], Self.isCacheValid(record, for: libraryAsset.asset) {
-                recordsByID[identifier] = record
+                let currentCollectionIDs = libraryAsset.collections.map(\.localIdentifier)
+                if record.collectionIdentifiers == currentCollectionIDs {
+                    recordsByID[identifier] = record
+                } else {
+                    // The hash is still good, but the incremental library scan (W-55) resolved
+                    // this photo's album membership fresh this time — persisting it here is what
+                    // keeps that fresh value from being thrown away as soon as this cache hit is
+                    // reused, which would otherwise leave every later incremental scan reusing the
+                    // same stale membership forever instead of just until the next full scan.
+                    var refreshed = record
+                    refreshed.collectionIdentifiers = currentCollectionIDs
+                    recordsByID[identifier] = refreshed
+                    collectionsToRefresh.append(refreshed)
+                }
             } else {
                 needsHashing.append(libraryAsset)
             }
@@ -75,6 +89,10 @@ struct AssetHashingPipeline {
         for record in freshRecords {
             recordsByID[record.localIdentifier] = record
         }
+
+        // A cache hit never needed a hash save (W-11); its refreshed album membership does, or it
+        // never reaches disk at all.
+        try? await hashStore.save(collectionsToRefresh)
 
         return libraryAssets.compactMap { recordsByID[$0.asset.localIdentifier] }
     }
@@ -186,7 +204,8 @@ struct AssetHashingPipeline {
             state: state,
             failureReason: failureReason,
             groupID: nil,
-            updatedAt: Date()
+            updatedAt: Date(),
+            collectionIdentifiers: libraryAsset.collections.map(\.localIdentifier)
         )
     }
 }

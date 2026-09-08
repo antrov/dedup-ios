@@ -84,6 +84,62 @@ final class AssetHashingPipelineTests: XCTestCase {
         XCTAssertEqual(log.reports.last?.total, 1)
     }
 
+    /// A cache hit reuses the stored hash outright (W-11), but an incremental library scan can
+    /// still have resolved this photo's *album* fresh — this is what keeps that from being
+    /// silently discarded, and from vanishing again on the very next scan (W-54).
+    func testCacheHitRefreshesStaleCollectionIdentifiers() async throws {
+        let collection = StubAssetCollection(identifier: "album-1")
+        let libraryAsset = makeLibraryAsset(collections: [collection])
+        let hashStore = HashStoreMock()
+        hashStore.records = [
+            libraryAsset.asset.localIdentifier: makeHashRecord(
+                identifier: libraryAsset.asset.localIdentifier,
+                collectionIdentifiers: ["stale-album"]
+            )
+        ]
+        let hashing = ImageHashingServiceMock()
+
+        let records = await AssetHashingPipeline(hashing: hashing, hashStore: hashStore).resolveRecords(
+            for: [libraryAsset],
+            allowsNetworkAccess: false,
+            onProgress: { _, _ in }
+        )
+
+        let hashCalls = await hashing.hashCallCount
+        XCTAssertEqual(hashCalls, 0, "the hash itself is still valid — only album membership moved")
+        XCTAssertEqual(records.first?.collectionIdentifiers, ["album-1"])
+
+        let persisted = try await hashStore.load(identifiers: [libraryAsset.asset.localIdentifier])
+        XCTAssertEqual(
+            persisted.first?.collectionIdentifiers, ["album-1"],
+            "the refreshed membership must reach the store, or the next scan reuses the stale one again"
+        )
+    }
+
+    /// The common case — nothing about a cached photo moved — must not turn every scan into a
+    /// write, on top of the read the cache lookup itself already is.
+    func testCacheHitWithUnchangedCollectionsDoesNotResave() async throws {
+        let collection = StubAssetCollection(identifier: "album-1")
+        let libraryAsset = makeLibraryAsset(collections: [collection])
+        let hashStore = HashStoreMock()
+        hashStore.records = [
+            libraryAsset.asset.localIdentifier: makeHashRecord(
+                identifier: libraryAsset.asset.localIdentifier,
+                collectionIdentifiers: ["album-1"]
+            )
+        ]
+        let hashing = ImageHashingServiceMock()
+
+        _ = await AssetHashingPipeline(hashing: hashing, hashStore: hashStore).resolveRecords(
+            for: [libraryAsset],
+            allowsNetworkAccess: false,
+            onProgress: { _, _ in }
+        )
+
+        let hashCalls = await hashing.hashCallCount
+        XCTAssertEqual(hashCalls, 0)
+    }
+
     // MARK: - W-52: cache validity on an in-memory SQLite store (W-11)
 
     func testValidSQLiteRecordMatchingVersionAndDateIsNotRecomputed() async throws {

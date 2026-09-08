@@ -380,6 +380,20 @@ Testy `HashStore` na bazie w pamięci: zapis i odczyt, unieważnienie po zmianie
 Test na syntetycznych hashach (generowanych w teście, bez zdjęć) dla 10 tys., 50 tys. i 100 tys. elementów, z budżetem czasowym i pomiarem szczytowego zużycia pamięci.
 *Uzasadnienie:* pozwala mierzyć skalowanie bez dostępu do dużej biblioteki zdjęć i jest warunkiem podjęcia decyzji z W-28. Punkt odniesienia z pomiarów: 100 tys. hashy to ~0,4 s na ośmiu rdzeniach.
 
+### H. Skanowanie przyrostowe biblioteki
+
+**W-54 — Migawka przynależności do albumów w cache'u**
+Rozszerzyć `asset_hashes` o kolumnę z listą identyfikatorów albumów, do których zdjęcie należało przy ostatnim spotkaniu (`collection_identifiers`, tekst, `NULL`/puste = brak lub nieznane). Wypełniać ją przy każdym liczeniu hasha i odświeżać przy trafieniu w cache, gdy bieżąca przynależność różni się od zapisanej.
+*Uzasadnienie:* to jedyna informacja brakująca w cache'u hashy, żeby drugi i kolejny skan mógł pominąć pełny spacer po albumach (W-55) — bez niej nazwa albumu pokazywana w UI musiałaby być odtwarzana od zera przy każdym uruchomieniu, mimo że reszta cache'u już jest trwała.
+
+**W-55 — Skanowanie biblioteki przyrostowe względem cache'u**
+`PhotoLibraryService.fetchLibraryAssets` dostaje wariant przyjmujący migawkę poprzedniego skanu (identyfikatory zdjęć + W-54). Zdjęcie już znane zachowuje swoją przynależność do albumów bez ponownego przeszukiwania wszystkich albumów regularnych; przeszukiwanie ograniczone jest do zdjęć nowych, niezależnie od tego, ile albumów ma biblioteka. Albumy współdzielone z iCloud (zwykle nieliczne) są nadal przeszukiwane w całości, żeby wykrywanie dodania/usunięcia w nich pozostało dokładne bez osobnej logiki różnicowej. Pusta migawka (pierwszy skan, albo cache dopiero co wyczyszczony) daje dokładnie taki sam wynik i taki sam koszt jak dotychczasowy pełny spacer — to jedna funkcja, nie dwie ścieżki do utrzymania w zgodzie.
+*Uzasadnienie:* W-16 rozwiązał ponowne liczenie hashy, ale nie dotyka wcześniejszego kroku — `fetchLibraryAssets` i tak przechodzi po każdym albumie regularnym przy **każdym** uruchomieniu aplikacji, niezależnie od tego, czy w bibliotece cokolwiek się zmieniło. Przy bibliotece z wieloma albumami to właśnie ten krok, nie liczenie hashy, sprawia, że powtórne otwarcie aplikacji nadal wygląda jak pełne skanowanie od zera — dokładnie objaw zgłoszony jako problem do naprawienia w tym dokumencie.
+
+**W-56 — Ręczne wymuszenie pełnego skanu**
+Gest „pociągnij, by odświeżyć" oraz przycisk „spróbuj ponownie" po błędzie zawsze uruchamiają pełny, niewybiórczy spacer po bibliotece (`forceFullScan`), z pominięciem ścieżki przyrostowej. Automatyczny skan przy otwarciu ekranu korzysta ze ścieżki przyrostowej domyślnie.
+*Uzasadnienie:* skanowanie przyrostowe (W-55) świadomie nie wykrywa przeniesienia zdjęcia między dwoma już znanymi albumami, jeśli nic innego w nim się nie zmieniło — nazwa albumu pokazana w UI może się wtedy spóźnić do najbliższego pełnego skanu. Zawsze dostępna, jawna droga do pełnego przeliczenia jest tanią siecią bezpieczeństwa na wypadek takiej rozbieżności, bez wprowadzania osobnego mechanizmu naprawczego czy zależności od tego, jak długo dana rozbieżność by się utrzymywała.
+
 ---
 
 ## 5. Błędy w obecnym kodzie
@@ -512,8 +526,9 @@ Licznik `idx` nadawany jest w kolejności enumeracji, ale assety trafiają do zb
 | 5 | W-37…W-43, B-11, B-13…B-15 | Stabilny interfejs, czytelny stan, brak wyścigów. |
 | 6 | W-44…W-47, B-12, B-19 | Usuwanie robi to, co obiecuje; wynik aktualizuje się przyrostowo. |
 | 7 | W-48…W-53, B-16 | Komplet testów, w tym test determinizmu i wydajności. |
+| 8 | W-54…W-56 | Drugie i kolejne otwarcie aplikacji nie skanuje ponownie całej biblioteki zdjęć — tylko to, co faktycznie się zmieniło. |
 
-Etapy 1–4 są wymagane, żeby uznać główny cel (poprawne grupowanie) za osiągnięty. Etapy 5–7 domykają jakość.
+Etapy 1–4 są wymagane, żeby uznać główny cel (poprawne grupowanie) za osiągnięty. Etapy 5–8 domykają jakość.
 
 ---
 
@@ -527,3 +542,4 @@ Etapy 1–4 są wymagane, żeby uznać główny cel (poprawne grupowanie) za osi
 6. Interfejs pozostaje responsywny w trakcie skanowania; postęp i fazy są widoczne.
 7. Liczba zdjęć nieprzetworzonych jest widoczna wraz z przyczyną.
 8. SwiftLint i SwiftFormat przechodzą bez nowych naruszeń (uwaga na włączone reguły `force_unwrapping` i `force_cast`).
+9. Drugie i kolejne uruchomienie aplikacji nie tylko nie liczy hashy dla niezmienionych zdjęć (punkt 3) — nie przeszukuje też ponownie wszystkich albumów regularnych, jeśli biblioteka nie zyskała nowych zdjęć od ostatniego skanu (W-55).

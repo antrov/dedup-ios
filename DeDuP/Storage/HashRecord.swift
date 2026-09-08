@@ -29,4 +29,9 @@ struct HashRecord: Equatable, Sendable {
     let failureReason: String?
     var groupID: String?
     let updatedAt: Date
+    /// Local identifiers of the albums this photo was in, as of the last time it was actually
+    /// looked at (W-54) — the seed an incremental library scan (W-55) reuses for a photo it hasn't
+    /// rediscovered as new, so it never needs to walk every album again just to redraw its own
+    /// album name. Purely cosmetic (`Asset.collectionName`): never read by hashing or grouping.
+    var collectionIdentifiers: [String] = []
 }
