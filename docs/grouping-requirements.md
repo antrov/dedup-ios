@@ -517,6 +517,12 @@ Licznik `idx` nadawany jest w kolejności enumeracji, ale assety trafiają do zb
 **Skutek:** widok szczegółów pokazuje przypadkowy album z kilku, do których zdjęcie należy; przy usuwaniu (B-12) decyduje o tym, z którego albumu zdjęcie zostanie wypisane.
 **Naprawia:** przechowywać listę albumów zamiast pojedynczego; zależne od decyzji z W-45.
 
+### B-20 — Status skanowania niewidoczny, gdy lista ma już zawartość
+[ContentView.swift:49](DeDuP/PhotosFlow/ContentView.swift:49), [ContentView.swift:158](DeDuP/PhotosFlow/ContentView.swift:158)
+`placeholder` — jedyne miejsce na głównym ekranie pokazujące etykietę bieżącej fazy (W-38), w tym krok skanowania z W-57 — renderuje się wyłącznie, gdy `viewModel.state.groups.isEmpty`. Skoro znalezione duplikaty zostają na ekranie przez każdy kolejny skan (żeby nie tracić pozycji przewijania, W-38/B-14), już od **drugiego** udanego skanu ten warunek jest prawie zawsze fałszywy — a więc `placeholder` się nie pokazuje. Jedynym miejscem, gdzie `status` był w ogóle widoczny, był arkusz filtrów, otwarty domyślnie tylko przy starcie widoku.
+**Skutek:** użytkownik z choćby jedną już znalezioną grupą duplikatów nie widzi żadnej etykiety fazy — ani starego, niezróżnicowanego napisu „Scanning library", ani nowego rozróżnienia z W-57 — dopóki ręcznie nie otworzy arkusza filtrów. Efekt subiektywnie nie do odróżnienia od „nic się nie dzieje", niezależnie od tego, ile informacji o postępie faktycznie publikuje `PhotosViewModel`.
+**Naprawia:** stały baner nad listą (`safeAreaInset(edge: .top)`), widoczny dokładnie wtedy, gdy `placeholder` nie jest — bez zasłaniania listy i bez ingerencji w gest odświeżania (W-41).
+
 ---
 
 ## 6. Kolejność wdrożenia

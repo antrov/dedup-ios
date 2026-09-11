@@ -47,6 +47,14 @@ struct ContentView: View {
             // gesture aimed at what's underneath (W-41). Only the failure placeholder has
             // anything to tap.
             .overlay { placeholder.allowsHitTesting(isShowingFailure) }
+            // `placeholder` only ever shows while the list has nothing in it yet (W-38, B-14) —
+            // once a previous scan has found duplicates, that list stays on screen through every
+            // later scan, and with it the *only* place the current step showed. This banner is
+            // the other half: visible exactly when the centered placeholder isn't, so a returning
+            // user — the common case once the app has run once — can still see which element of
+            // the library (W-57) or pipeline phase a scan is currently working through, without
+            // the list being blanked out from under them.
+            .safeAreaInset(edge: .top) { scanStatusBanner }
             .navigationTitle("DeDuP")
             .toolbar { toolbarContent }
             // Awaits the scan itself, so the refresh indicator stays up until the work is
@@ -193,6 +201,40 @@ struct ContentView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+        }
+    }
+
+    /// The other half of `status`'s two audiences (W-57): shown only once the list already has
+    /// something in it, which is exactly when `workingPlaceholder` — the centered spinner — is
+    /// not, since that one only appears over an empty list (W-38). `EmptyView()` collapses to no
+    /// inset at all, so this costs nothing on screen the rest of the time.
+    @ViewBuilder
+    private var scanStatusBanner: some View {
+        if let status, !viewModel.state.groups.isEmpty {
+            HStack(spacing: 8) {
+                if let fraction = status.fraction {
+                    ProgressView(value: fraction)
+                        .frame(width: 28)
+                } else {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(status.label)
+                        .font(.footnote)
+                    if let detail = status.detail {
+                        Text(detail)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 6)
+            .background(.bar)
+        } else {
+            EmptyView()
         }
     }
 
