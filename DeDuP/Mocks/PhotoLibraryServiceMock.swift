@@ -33,9 +33,9 @@
             return authorizationStatus
         }
 
-        func fetchLibraryAssets(onProgress: @escaping @Sendable (Int, Int) -> Void) async -> Set<LibraryAsset> {
+        func fetchLibraryAssets(onProgress: @escaping @Sendable (LibraryScanStep, Int, Int) -> Void) async -> Set<LibraryAsset> {
             fetchCallCount += 1
-            onProgress(libraryAssets.count, libraryAssets.count)
+            onProgress(.localPhotos, libraryAssets.count, libraryAssets.count)
             return libraryAssets
         }
 

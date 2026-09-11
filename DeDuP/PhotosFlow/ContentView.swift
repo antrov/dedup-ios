@@ -106,10 +106,14 @@ struct ContentView: View {
         switch viewModel.state.phase {
         case .requestingAuthorization:
             return .init(label: "Requesting access to photos", detail: nil, fraction: nil)
-        case let .scanningLibrary(progress):
+        case let .scanningLibrary(step, progress):
             // Bar only, no counts: the library walk visits a photo once per album it's in, so
-            // its totals measure enumeration work rather than photos.
-            return .init(label: "Scanning library", detail: nil, fraction: progress.fraction)
+            // its totals measure enumeration work rather than photos. The label names which
+            // element of the library this is (W-57): shared albums are always walked in full, on
+            // every scan, so — unlike the local-photos step — this can take a while even when the
+            // rest of the scan is otherwise instant, and it's worth saying so rather than leaving
+            // "scanning" looking stuck.
+            return .init(label: Self.scanningLabel(for: step), detail: nil, fraction: progress.fraction)
         case let .hashingImages(progress):
             return .init(label: "Analysing photos", detail: Self.detail(for: progress), fraction: progress.fraction)
         case .grouping:
@@ -129,6 +133,13 @@ struct ContentView: View {
     private static func detail(for progress: PhaseProgress) -> String? {
         guard progress.total > 0 else { return nil }
         return "\(progress.completed.formatted()) / \(progress.total.formatted())"
+    }
+
+    private static func scanningLabel(for step: LibraryScanStep) -> String {
+        switch step {
+        case .localPhotos: return "Scanning your photos"
+        case .sharedAlbums: return "Scanning shared albums"
+        }
     }
 
     /// What replaces the list when there is nothing to list. This is the whole point of the

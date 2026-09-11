@@ -81,22 +81,22 @@ final class PhotoLibraryServiceMock: PhotoLibraryServiceProtocol, @unchecked Sen
         return authorizationStatusToReturn
     }
 
-    func fetchLibraryAssets(onProgress: @escaping @Sendable (Int, Int) -> Void) async -> Set<LibraryAsset> {
+    func fetchLibraryAssets(onProgress: @escaping @Sendable (LibraryScanStep, Int, Int) -> Void) async -> Set<LibraryAsset> {
         fetchCallCount += 1
         let assets = assetsToReturn
-        onProgress(assets.count, assets.count)
+        onProgress(.localPhotos, assets.count, assets.count)
         return assets
     }
 
     func fetchLibraryAssets(
         reusing previousSnapshot: [LibraryAssetSnapshot],
-        onProgress: @escaping @Sendable (Int, Int) -> Void
+        onProgress: @escaping @Sendable (LibraryScanStep, Int, Int) -> Void
     ) async -> Set<LibraryAsset> {
         reusingFetchCallCount += 1
         lastPreviousSnapshot = previousSnapshot
         fetchCallCount += 1
         let assets = assetsToReturn
-        onProgress(assets.count, assets.count)
+        onProgress(.localPhotos, assets.count, assets.count)
         return assets
     }
 

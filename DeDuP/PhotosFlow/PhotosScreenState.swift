@@ -76,7 +76,10 @@ enum PhotosScreenState: Equatable {
         /// already granted access to passes through here, and must not blank the list out on the
         /// way in just because the permission is being re-checked.
         case requestingAuthorization
-        case scanningLibrary(PhaseProgress)
+        /// `step` is which element of the library the progress in `PhaseProgress` describes
+        /// (W-57) — the two run one after another, never interleaved, so there's always exactly
+        /// one current answer to "which one."
+        case scanningLibrary(step: LibraryScanStep, progress: PhaseProgress)
         case hashingImages(PhaseProgress)
         case grouping
     }

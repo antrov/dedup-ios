@@ -9,14 +9,31 @@ import Foundation
 import Photos
 import UIKit
 
+/// Which element of the library a scan is currently working through (W-57) — shown in the UI so
+/// "scanning" doesn't read as one undifferentiated step when its two halves follow very different
+/// rules and can take very different amounts of time.
+enum LibraryScanStep: Hashable, Sendable {
+    /// The user's own photos: the main library and their regular albums. An incremental scan
+    /// (W-55) skips almost all of this for a photo it already knows about, so on a scan that finds
+    /// nothing new, this step is close to instant regardless of library size.
+    case localPhotos
+    /// Albums other people have shared over iCloud. Unlike regular albums, these are always
+    /// walked in full, on every single scan (W-55's shortcut deliberately doesn't extend to them —
+    /// see `fetchLibraryAssets(reusing:onProgress:)`), so this is the one step that both runs on
+    /// every launch without exception and can be the slowest part of an otherwise-instant scan if
+    /// a lot of photos have been shared with the user.
+    case sharedAlbums
+}
+
 /// Everything the app needs from the photo library, behind a protocol so it can be swapped
 /// for a fake in previews and tests.
 protocol PhotoLibraryServiceProtocol {
     func requestAuthorization() async -> PHAuthorizationStatus
 
-    /// `onProgress` receives `(completed, total)` photo counts as the library is walked, so the
-    /// scan phase can be shown with real progress instead of an unlabelled spinner (W-38).
-    func fetchLibraryAssets(onProgress: @escaping @Sendable (Int, Int) -> Void) async -> Set<LibraryAsset>
+    /// `onProgress` receives the step currently being walked (W-57) and `(completed, total)` photo
+    /// counts within it, so the scan phase can be shown with real progress — and with which part
+    /// of the library it reflects — instead of an unlabelled spinner (W-38).
+    func fetchLibraryAssets(onProgress: @escaping @Sendable (LibraryScanStep, Int, Int) -> Void) async -> Set<LibraryAsset>
 
     /// Reuses `previousSnapshot` — the previous scan's identifiers and album membership — instead
     /// of re-deriving everything from scratch (W-55): a photo present in both is assumed
@@ -31,9 +48,12 @@ protocol PhotoLibraryServiceProtocol {
     /// prune it (W-13). What it can miss is a photo moving between two albums it was already in
     /// without anything else about it changing — the album name shown for it can lag until the
     /// next full `fetchLibraryAssets` (pull-to-refresh, or the first scan after this one fails).
+    ///
+    /// Shared albums (`LibraryScanStep.sharedAlbums`) are never part of that shortcut — they're
+    /// walked in full here exactly as they are in `fetchLibraryAssets(onProgress:)`.
     func fetchLibraryAssets(
         reusing previousSnapshot: [LibraryAssetSnapshot],
-        onProgress: @escaping @Sendable (Int, Int) -> Void
+        onProgress: @escaping @Sendable (LibraryScanStep, Int, Int) -> Void
     ) async -> Set<LibraryAsset>
 
     /// Cancelling the calling task cancels the underlying PhotoKit request (W-42), so a cell
@@ -51,7 +71,7 @@ extension PhotoLibraryServiceProtocol {
     /// route there.
     func fetchLibraryAssets(
         reusing previousSnapshot: [LibraryAssetSnapshot],
-        onProgress: @escaping @Sendable (Int, Int) -> Void
+        onProgress: @escaping @Sendable (LibraryScanStep, Int, Int) -> Void
     ) async -> Set<LibraryAsset> {
         await fetchLibraryAssets(onProgress: onProgress)
     }
@@ -139,7 +159,7 @@ final class PhotoLibraryService: NSObject, PhotoLibraryServiceProtocol, PHPhotoL
 
     private let imageManager = PHCachingImageManager()
     private let passesLock = NSLock()
-    private var lastFetchPasses: [(assets: PHFetchResult<PHAsset>, collection: PHAssetCollection?)] = []
+    private var lastFetchPasses: [(assets: PHFetchResult<PHAsset>, collection: PHAssetCollection?, step: LibraryScanStep)] = []
     private var lastCollectionFetches: [PHFetchResult<PHAssetCollection>] = []
     private var changesContinuation: AsyncStream<Void>.Continuation!
     lazy var libraryChanges: AsyncStream<Void> = AsyncStream { continuation in
@@ -191,7 +211,7 @@ final class PhotoLibraryService: NSObject, PhotoLibraryServiceProtocol, PHPhotoL
         }
     }
 
-    func fetchLibraryAssets(onProgress: @escaping @Sendable (Int, Int) -> Void) async -> Set<LibraryAsset> {
+    func fetchLibraryAssets(onProgress: @escaping @Sendable (LibraryScanStep, Int, Int) -> Void) async -> Set<LibraryAsset> {
         let (passes, collectionFetches) = fetchPasses()
         passesLock.lock()
         lastFetchPasses = passes
@@ -202,8 +222,11 @@ final class PhotoLibraryService: NSObject, PhotoLibraryServiceProtocol, PHPhotoL
         // visited by that album's pass and by the whole-library pass — which is why the UI shows
         // this as a bar without absolute numbers. Progress is reported once per pass rather than
         // once per asset, keeping the number of updates bounded without throttling here (W-21).
-        let total = passes.reduce(0) { $0 + $1.assets.count }
-        var completed = 0
+        // Totals are tracked per step (W-57) rather than as one combined figure, since the two
+        // steps run one after the other rather than interleaved — a combined total would make the
+        // bar jump partway through as soon as the step changes.
+        let totalsByStep = Dictionary(grouping: passes) { $0.step }.mapValues { $0.reduce(0) { $0 + $1.assets.count } }
+        var completedByStep: [LibraryScanStep: Int] = [:]
         var assetDict = [String: LibraryAsset]()
 
         for pass in passes {
@@ -230,8 +253,9 @@ final class PhotoLibraryService: NSObject, PhotoLibraryServiceProtocol, PHPhotoL
                     assetDict[asset.localIdentifier] = LibraryAsset(asset: asset, collections: collections)
                 }
             }
-            completed += pass.assets.count
-            onProgress(completed, total)
+            let completed = (completedByStep[pass.step] ?? 0) + pass.assets.count
+            completedByStep[pass.step] = completed
+            onProgress(pass.step, completed, totalsByStep[pass.step] ?? completed)
         }
 
         return Set(assetDict.values)
@@ -239,7 +263,7 @@ final class PhotoLibraryService: NSObject, PhotoLibraryServiceProtocol, PHPhotoL
 
     func fetchLibraryAssets(
         reusing previousSnapshot: [LibraryAssetSnapshot],
-        onProgress: @escaping @Sendable (Int, Int) -> Void
+        onProgress: @escaping @Sendable (LibraryScanStep, Int, Int) -> Void
     ) async -> Set<LibraryAsset> {
         // Nothing recorded yet — the very first scan — so every photo is "new" regardless; the
         // full walk is exactly the right amount of work, and it's the one path guaranteed to seed
@@ -257,6 +281,8 @@ final class PhotoLibraryService: NSObject, PhotoLibraryServiceProtocol, PHPhotoL
 
         // Shared albums are usually few, so — same as a full scan — they're still walked in full:
         // exact membership and insert/delete detection without a separate diffing story for them.
+        // Reported as its own step (W-57): it runs unconditionally, on every incremental scan, so
+        // it's worth the UI being explicit about which part of the wait this is.
         let sharedCollectionsFetch = PHAssetCollection.fetchAssetCollections(
             with: .album, subtype: .albumCloudShared, options: nil
         )
@@ -264,12 +290,15 @@ final class PhotoLibraryService: NSObject, PhotoLibraryServiceProtocol, PHPhotoL
         sharedCollectionsFetch.enumerateObjects { collection, _, _ in
             sharedPasses.append((PHAsset.fetchAssets(in: collection, options: Self.imageOnlyOptions), collection))
         }
+        let sharedTotal = sharedPasses.reduce(0) { $0 + $1.assets.count }
+        onProgress(.sharedAlbums, 0, sharedTotal)
         for pass in sharedPasses {
             guard let collection = pass.collection else { continue }
             pass.assets.enumerateObjects { asset, _, _ in
                 Self.mergeCollection(collection, for: asset, into: &assetDict)
             }
         }
+        onProgress(.sharedAlbums, sharedTotal, sharedTotal)
 
         // The rest of the library is one predicate-filtered fetch (W-01), cheap regardless of how
         // many regular albums exist, and gives every remaining photo its live `PHAsset` whether or
@@ -278,6 +307,8 @@ final class PhotoLibraryService: NSObject, PhotoLibraryServiceProtocol, PHPhotoL
         mainFetchOptions.includeAssetSourceTypes = [.typeUserLibrary, .typeiTunesSynced]
         mainFetchOptions.predicate = Self.imageOnlyPredicate
         let mainLibraryFetch = PHAsset.fetchAssets(with: .image, options: mainFetchOptions)
+        let localTotal = mainLibraryFetch.count
+        onProgress(.localPhotos, 0, localTotal)
 
         var newIdentifiers = Set<String>()
         mainLibraryFetch.enumerateObjects { asset, _, _ in
@@ -335,14 +366,15 @@ final class PhotoLibraryService: NSObject, PhotoLibraryServiceProtocol, PHPhotoL
             }
         }
 
-        onProgress(assetDict.count, assetDict.count)
+        onProgress(.localPhotos, localTotal, localTotal)
 
         // Keeps the live, in-foreground change observer working (W-55): it can no longer notice a
         // photo moving between two regular albums it already knew about — the same trade made
         // above — but still catches a photo being added to, or removed from, the library or a
         // shared album while the app stays open.
         passesLock.lock()
-        lastFetchPasses = [(assets: mainLibraryFetch, collection: nil)] + sharedPasses
+        lastFetchPasses = [(assets: mainLibraryFetch, collection: nil, step: .localPhotos)]
+            + sharedPasses.map { (assets: $0.assets, collection: $0.collection, step: .sharedAlbums) }
         lastCollectionFetches = [sharedCollectionsFetch]
         passesLock.unlock()
 
@@ -367,27 +399,29 @@ final class PhotoLibraryService: NSObject, PhotoLibraryServiceProtocol, PHPhotoL
 
     /// The three paths assets are pulled from, in the order that decides which album an asset
     /// present in several of them keeps: regular albums, iCloud shared albums, then everything
-    /// else in the library.
+    /// else in the library. Each pass carries which `LibraryScanStep` it belongs to (W-57), so a
+    /// caller reporting progress can say which element of the library a given pass is part of.
     private func fetchPasses() -> (
-        passes: [(assets: PHFetchResult<PHAsset>, collection: PHAssetCollection?)],
+        passes: [(assets: PHFetchResult<PHAsset>, collection: PHAssetCollection?, step: LibraryScanStep)],
         collectionFetches: [PHFetchResult<PHAssetCollection>]
     ) {
-        var passes: [(assets: PHFetchResult<PHAsset>, collection: PHAssetCollection?)] = []
+        var passes: [(assets: PHFetchResult<PHAsset>, collection: PHAssetCollection?, step: LibraryScanStep)] = []
         var collectionFetches: [PHFetchResult<PHAssetCollection>] = []
 
         for subtype in [PHAssetCollectionSubtype.albumRegular, .albumCloudShared] {
+            let step: LibraryScanStep = subtype == .albumCloudShared ? .sharedAlbums : .localPhotos
             let fetchResult = PHAssetCollection.fetchAssetCollections(with: .album, subtype: subtype, options: nil)
             collectionFetches.append(fetchResult)
             fetchResult.enumerateObjects { collection, _, _ in
                 let assets = PHAsset.fetchAssets(in: collection, options: Self.imageOnlyOptions)
-                passes.append((assets, collection))
+                passes.append((assets, collection, step))
             }
         }
 
         let fetchOptions = PHFetchOptions()
         fetchOptions.includeAssetSourceTypes = [.typeUserLibrary, .typeiTunesSynced]
         fetchOptions.predicate = Self.imageOnlyOptions.predicate
-        passes.append((PHAsset.fetchAssets(with: .image, options: fetchOptions), nil))
+        passes.append((PHAsset.fetchAssets(with: .image, options: fetchOptions), nil, .localPhotos))
 
         return (passes, collectionFetches)
     }

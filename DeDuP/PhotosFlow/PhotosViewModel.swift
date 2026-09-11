@@ -295,7 +295,7 @@ final class PhotosViewModel: ObservableObject {
     }
 
     private func handleLibraryChange() async {
-        let newLibraryAssets = await photoLibrary.fetchLibraryAssets { _, _ in }
+        let newLibraryAssets = await photoLibrary.fetchLibraryAssets { _, _, _ in }
 
         let oldAssetsByID = Dictionary(uniqueKeysWithValues: libraryAssets.map { ($0.asset.localIdentifier, $0) })
         let newAssetsByID = Dictionary(uniqueKeysWithValues: newLibraryAssets.map { ($0.asset.localIdentifier, $0) })
@@ -472,10 +472,10 @@ private extension PhotosViewModel {
         // replaces this one waits behind it (W-40).
         guard !Task.isCancelled else { return }
 
-        enterPhase(.scanningLibrary(PhaseProgress()))
-        let fetchedAssets = await fetchLibraryAssets(forceFullScan: forceFullScan) { [weak self] completed, total in
+        enterPhase(.scanningLibrary(step: .localPhotos, progress: PhaseProgress()))
+        let fetchedAssets = await fetchLibraryAssets(forceFullScan: forceFullScan) { [weak self] step, completed, total in
             Task { @MainActor in
-                self?.reportLibraryScanProgress(PhaseProgress(completed: completed, total: total))
+                self?.reportLibraryScanProgress(step: step, PhaseProgress(completed: completed, total: total))
             }
         }
         guard !Task.isCancelled else { return }
@@ -511,7 +511,7 @@ private extension PhotosViewModel {
     /// than depends on that fallback.
     func fetchLibraryAssets(
         forceFullScan: Bool,
-        onProgress: @escaping @Sendable (Int, Int) -> Void
+        onProgress: @escaping @Sendable (LibraryScanStep, Int, Int) -> Void
     ) async -> Set<LibraryAsset> {
         guard !forceFullScan else {
             return await photoLibrary.fetchLibraryAssets(onProgress: onProgress)
@@ -617,9 +617,9 @@ private extension PhotosViewModel {
 
     /// Dropped once the scan has moved on: the library fetch reports its last pass shortly after
     /// hashing has already started, and re-entering the previous phase would rewind the bar.
-    func reportLibraryScanProgress(_ progress: PhaseProgress) {
+    func reportLibraryScanProgress(step: LibraryScanStep, _ progress: PhaseProgress) {
         guard case .working(.scanningLibrary, _) = state else { return }
-        enterPhase(.scanningLibrary(progress))
+        enterPhase(.scanningLibrary(step: step, progress: progress))
     }
 
     func reportHashingProgress(_ progress: PhaseProgress) {

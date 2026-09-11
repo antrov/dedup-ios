@@ -97,6 +97,34 @@ final class PhotosViewModelStateTests: XCTestCase {
         XCTAssertEqual(groups.first?.assets.count, 2)
     }
 
+    // MARK: - W-57: which element of the library a scan is working through is visible in the state
+
+    /// The mock reports every step as `.localPhotos` (it doesn't simulate PhotoKit's real
+    /// shared-vs-regular split), so this only proves the step a scan reports actually reaches the
+    /// published state rather than being dropped on the way — not which step a real scan picks.
+    func testScanningLibraryPhaseCarriesTheStepItWasReportedWith() async {
+        let photoLibrary = PhotoLibraryServiceMock()
+        photoLibrary.libraryAssets = [makeLibraryAsset()]
+        let hashing = ImageHashingServiceMock()
+
+        let viewModel = makePhotosViewModel(photoLibrary: photoLibrary, hashing: hashing)
+
+        var published: [PhotosScreenState] = []
+        let subscription = viewModel.$state.sink { published.append($0) }
+        defer { subscription.cancel() }
+
+        await viewModel.fetch()
+
+        let scanningPhases = published.compactMap { state -> LibraryScanStep? in
+            guard case let .working(.scanningLibrary(step, _), _) = state else { return nil }
+            return step
+        }
+        XCTAssertTrue(
+            scanningPhases.contains(.localPhotos),
+            "the step reported by the library service should reach the published state, saw \(scanningPhases)"
+        )
+    }
+
     func testProcessingCountsReportTheWholeLibrary() async {
         let photoLibrary = PhotoLibraryServiceMock()
         photoLibrary.libraryAssets = [makeLibraryAsset(), makeLibraryAsset(), makeLibraryAsset()]

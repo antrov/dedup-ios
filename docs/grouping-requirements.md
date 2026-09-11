@@ -394,6 +394,10 @@ Rozszerzyć `asset_hashes` o kolumnę z listą identyfikatorów albumów, do kt�
 Gest „pociągnij, by odświeżyć" oraz przycisk „spróbuj ponownie" po błędzie zawsze uruchamiają pełny, niewybiórczy spacer po bibliotece (`forceFullScan`), z pominięciem ścieżki przyrostowej. Automatyczny skan przy otwarciu ekranu korzysta ze ścieżki przyrostowej domyślnie.
 *Uzasadnienie:* skanowanie przyrostowe (W-55) świadomie nie wykrywa przeniesienia zdjęcia między dwoma już znanymi albumami, jeśli nic innego w nim się nie zmieniło — nazwa albumu pokazana w UI może się wtedy spóźnić do najbliższego pełnego skanu. Zawsze dostępna, jawna droga do pełnego przeliczenia jest tanią siecią bezpieczeństwa na wypadek takiej rozbieżności, bez wprowadzania osobnego mechanizmu naprawczego czy zależności od tego, jak długo dana rozbieżność by się utrzymywała.
 
+**W-57 — Widoczny element biblioteki podczas skanowania**
+Faza `scanningLibrary` niesie dodatkowo, który element biblioteki jest właśnie przeszukiwany — zdjęcia lokalne (główna biblioteka i albumy regularne) albo albumy współdzielone z iCloud — i UI pokazuje odpowiednią do niego etykietę zamiast jednego, niezróżnicowanego napisu „skanowanie".
+*Uzasadnienie:* te dwa elementy rządzą się innymi zasadami z punktu widzenia użytkownika patrzącego na pasek postępu. Zdjęcia lokalne korzystają w pełni ze skrótu z W-55 — przy braku nowych zdjęć ten krok jest natychmiastowy niezależnie od rozmiaru biblioteki. Albumy współdzielone z iCloud **nie** korzystają z tego skrótu i są przeszukiwane w całości przy **każdym** skanie, także tym automatycznym przy otwarciu aplikacji — to jedyny element skanowania biblioteki, który wciąż płaci pełny koszt za każdym razem, i przy dużej liczbie zdjęć udostępnionych użytkownikowi może to być najwolniejszy krok całego, poza tym natychmiastowego, skanu. Bez rozróżnienia w UI taki dłuższy krok wyglądałby jak nawrót do pełnego skanowania sprzed W-54…W-56, zamiast jak jego jedyny pozostały, świadomie niezoptymalizowany wyjątek.
+
 ---
 
 ## 5. Błędy w obecnym kodzie
@@ -526,7 +530,7 @@ Licznik `idx` nadawany jest w kolejności enumeracji, ale assety trafiają do zb
 | 5 | W-37…W-43, B-11, B-13…B-15 | Stabilny interfejs, czytelny stan, brak wyścigów. |
 | 6 | W-44…W-47, B-12, B-19 | Usuwanie robi to, co obiecuje; wynik aktualizuje się przyrostowo. |
 | 7 | W-48…W-53, B-16 | Komplet testów, w tym test determinizmu i wydajności. |
-| 8 | W-54…W-56 | Drugie i kolejne otwarcie aplikacji nie skanuje ponownie całej biblioteki zdjęć — tylko to, co faktycznie się zmieniło. |
+| 8 | W-54…W-57 | Drugie i kolejne otwarcie aplikacji nie skanuje ponownie całej biblioteki zdjęć — tylko to, co faktycznie się zmieniło — i UI mówi wprost, który element biblioteki jest właśnie przeszukiwany. |
 
 Etapy 1–4 są wymagane, żeby uznać główny cel (poprawne grupowanie) za osiągnięty. Etapy 5–8 domykają jakość.
 
